@@ -1,0 +1,28 @@
+title = "Leaderboard"  # From Git
+gitRepoUrl = "https://github.com/arxkdev/Leaderboard" # From Git
+
+gitSourceBranch = "main"
+changelog = true
+
+[home]
+enabled = true
+includeReadme = true # Optional
+
+# From git:
+organizationName = "arxkdev"
+projectName = "Leaderboard"
+url = "https://kumarion.github.io"
+baseUrl = "/Leaderboard/"
+tagline = "A simple leaderboard solution."
+
+# [[classOrder]]
+# section = "Main"
+# classes = ["Leaderboard"]
+
+# [[classOrder]]
+# section = "Util"
+# classes = ["Timer", "Signal"]
+
+[footer]
+style = "dark"
+copyright = "Copyright © 2023 Arxk. Built with Moonwave and Docusaurus"

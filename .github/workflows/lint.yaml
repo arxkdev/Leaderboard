@@ -1,0 +1,36 @@
+name: Lint for Repli
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  Lint:
+    name: Run Selene Linter
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v3
+
+      - name: Setting up Aftman
+        uses: ok-nick/setup-aftman@v0
+
+        with:
+          version: "v0.2.7"
+          token: ${{ SECRETS.GITHUB_TOKEN }}
+
+      - name: Generate the standard library
+        run: selene generate-roblox-std
+
+      # Run selene through the library folder
+      - name: Source checking with Selene
+        run: selene lib
+
+      # Run selene through the testing folder
+      - name: Testing checking with Selene
+        run: selene testing
