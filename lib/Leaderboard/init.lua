@@ -107,8 +107,9 @@ local function GetUserInfosFromId(userId: number): string
 	userId = tonumber(userId);
 
 	-- First, check if the cache contains the name
-	if (UserIdsCache[userId]) then 
-		return UserIdsCache[userId];
+	if (UserIdsCache[userId]) then
+		local Username, DisplayName = unpack(UserIdsCache[userId]);
+		return Username, DisplayName;
 	end;
 
 	-- Second, check if the user is already connected to the server
@@ -155,20 +156,20 @@ function Leaderboard:GetTopData(amount)
 		if (self.StoreType == "MemoryStore") then
 			local data = self.Store:GetTopData(amount, Enum.SortDirection.Descending);
 			for _, v in pairs(data) do
-				local username, displayName = GetUserInfosFromId(v.key);
+				local Username, DisplayName = GetUserInfosFromId(v.key);
 				v.value = Compression.Decompress(v.value);
-				v.username = username;
-				v.displayName = displayName;
+				v.username = Username;
+				v.displayName = DisplayName;
 			end;
 			return data;
 		else
 			local result = self.Store:GetSortedAsync(false, amount);
 			local data = result:GetCurrentPage();
 			for _, v in pairs(data) do
-				local username, displayName = GetUserInfosFromId(v.key);
+				local Username, DisplayName = GetUserInfosFromId(v.key);
 				v.value = Compression.Decompress(v.value);
-				v.username = username;
-				v.displayName = displayName;
+				v.username = Username;
+				v.displayName = DisplayName;
 			end;
 			return data;
 		end;
