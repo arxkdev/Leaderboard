@@ -11,11 +11,17 @@ export type LeaderboardArguments = {
 	Shards: {MemoryStoreSortedMap},
 	ShardCount: number,
 }
+export type TopData = {
+	key: number,
+	value: number,
+	username: string,
+	displayName: string,
+}
 
 type Object = {
 	__index: Object,
 	UpdateData: (self: Shards, userId: number, value: number) -> (),
-	GetTopData: (self: Shards, amount: number, sortDirection: Enum.SortDirection) -> (),
+	GetTopData: (self: Shards, amount: number, sortDirection: Enum.SortDirection) -> {TopData},
 	GetShardKey: (self: Shards, userId: number) -> (number),
 	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number) -> Shards,
 }

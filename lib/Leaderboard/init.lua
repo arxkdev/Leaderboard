@@ -4,6 +4,8 @@
 
 -- DataStoreService to handle longer than 42 days (all time most likely)
 local DataStoreService = game:GetService("DataStoreService");
+local UserService = game:GetService("UserService");
+local Players = game:GetService("Players");
 
 -- Requirements
 local Promise = require(script.Promise);
@@ -22,6 +24,12 @@ export type LeaderboardArguments = {
 	FallbackExpiry: number,
 	LeaderboardUpdated: Signal.Signal<...any>,
 }
+export type TopData = {
+	key: number,
+	value: number,
+	username: string,
+	displayName: string,
+}
 
 type Object = {
 	__index: Object,
@@ -30,7 +38,7 @@ type Object = {
 	UpsertFunction: ((Leaderboard) -> ())?,
 	Start: (self: Object, topAmount: number, interval: number, func: (Leaderboard) -> ()) -> (),
 	UpdateData: (self: Leaderboard, userId: number, value: number) -> (),
-	GetTopData: (self: Leaderboard, amount: number) -> (),
+	GetTopData: (self: Leaderboard, amount: number) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?) -> Leaderboard,
 }
@@ -40,6 +48,7 @@ export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: 
 
 -- Start
 local Leaderboards = {}; -- To handle automatic upserting and retrieval of leaderboards
+local UserIdsCache = {}; -- To assign userids {username, displayName}
 
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
@@ -80,19 +89,6 @@ local FALLBACK_EXPIRY_TIMES = {
 }
 
 -- Helpers
-local function TraverseModifyTable(tbl: {any}, modifyFunc: (...any) -> (), modifyPredicate: (...any) -> ()): {any}
-	for k, v in pairs(tbl) do
-		if (type(v) == "table") then
-			TraverseModifyTable(v, modifyFunc, modifyPredicate);
-		else
-			if modifyPredicate(k, v) then
-				tbl[k] = modifyFunc(v);
-			end;
-		end;
-	end;
-	return tbl;
-end
-
 local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
 	if (leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly") then
 		return "MemoryStore", Shards.new(leaderboardType, serviceKey, SHARD_COUNTS[leaderboardType]);
@@ -105,6 +101,35 @@ local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardTy
 	end;
 
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
+end
+
+local function GetUserInfosFromId(userId: number): string
+	userId = tonumber(userId);
+
+	-- First, check if the cache contains the name
+	if (UserIdsCache[userId]) then 
+		return UserIdsCache[userId];
+	end;
+
+	-- Second, check if the user is already connected to the server
+	local player = Players:GetPlayerByUserId(userId);
+	if (player) then
+		UserIdsCache[userId] = {player.Name, player.DisplayName};
+		return player.Name, player.DisplayName;
+	end;
+
+	-- If all else fails, send a request
+	local Success, Result = pcall(function()
+		return UserService:GetUserInfosByUserIdsAsync({userId});
+	end);
+	if (not Success) then
+		warn(`Leaderboard had trouble getting user info: {Result}`);
+		return "Unknown", "Unknown";
+	end;
+	local Username = Result[1] and Result[1].Username or "Unknown";
+	local DisplayName = Result[1] and Result[1].DisplayName or "Unknown";
+	UserIdsCache[userId] = {Username, DisplayName};
+	return Username, DisplayName;
 end
 
 function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?)
@@ -123,37 +148,42 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 end
 
 function Leaderboard:GetTopData(amount)
-	assert(type(amount) == "number", "Amount must be a number")
-	assert(amount <= 100, "You can only get the top 100.")
+	assert(type(amount) == "number", "Amount must be a number");
+	assert(amount <= 100, "You can only get the top 100.");
 
-	local function getData()
+	local function PromiseRetrieveTopData()
 		if (self.StoreType == "MemoryStore") then
 			local data = self.Store:GetTopData(amount, Enum.SortDirection.Descending);
-			return TraverseModifyTable(data, function(v)
-				return Compression.Decompress(v);
-			end, function(k, v)
-				return k == 'value' and type(v) == 'number';
-			end);
+			for _, v in pairs(data) do
+				local username, displayName = GetUserInfosFromId(v.key);
+				v.value = Compression.Decompress(v.value);
+				v.username = username;
+				v.displayName = displayName;
+			end;
+			return data;
 		else
 			local result = self.Store:GetSortedAsync(false, amount);
 			local data = result:GetCurrentPage();
-			return TraverseModifyTable(data, function(v)
-				return Compression.Decompress(v);
-			end, function(k, v)
-				return k == 'value' and type(v) == 'number';
-			end);
-		end
-	end
+			for _, v in pairs(data) do
+				local username, displayName = GetUserInfosFromId(v.key);
+				v.value = Compression.Decompress(v.value);
+				v.username = username;
+				v.displayName = displayName;
+			end;
+			return data;
+		end;
+	end;
 
 	return Promise.new(function(resolve, reject)
-		local success, data = pcall(getData)
-		if success then
-			resolve(data)
+		local success, data = pcall(PromiseRetrieveTopData);
+
+		if (success) then
+			resolve(data);
 		else
-			warn(success, data)
-			reject(data)
-		end
-	end)
+			warn(success, data);
+			reject(data);
+		end;
+	end);
 end
 
 function Leaderboard:UpdateData(userId, value) : ()
