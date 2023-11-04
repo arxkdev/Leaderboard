@@ -1,5 +1,5 @@
 --[[
-	Arxk
+	Arxk was here
 ]]
 
 -- DataStoreService to handle longer than 42 days (all time most likely)
@@ -13,7 +13,7 @@ local Compression = require(script.Compression);
 
 -- We support Daily, Weekly, Monthly and AllTime currently
 type Shard = Shards.Shards;
-export type LeaderboardType = "Daily" | "Weekly" | "Monthly" | "AllTime";
+export type LeaderboardType = "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime";
 export type LeaderboardArguments = {
 	ServiceKey: string,
 	Type: LeaderboardType,
@@ -26,8 +26,9 @@ export type LeaderboardArguments = {
 type Object = {
 	__index: Object,
 	UpdateInterval: number,
+	TopAmount: number,
 	UpsertFunction: ((Leaderboard) -> ())?,
-	Start: (self: Object, interval: number, func: (Leaderboard) -> ()) -> (),
+	Start: (self: Object, topAmount: number, interval: number, func: (Leaderboard) -> ()) -> (),
 	UpdateData: (self: Leaderboard, userId: number, value: number) -> (),
 	GetTopData: (self: Leaderboard, amount: number) -> (),
 	Destroy: (self: Leaderboard) -> (),
@@ -43,18 +44,20 @@ local Leaderboards = {}; -- To handle automatic upserting and retrieval of leade
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 Leaderboard.UpsertFunction = nil;
-Leaderboard.UpdateInterval = 120;
+Leaderboard.UpdateInterval = 120; -- Default to 2 minutes
+Leaderboard.TopAmount = 100; -- Default to 100
 
-function Leaderboard:Start(interval: number, func: UpsertFunctionType)
+function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunctionType)
 	Leaderboard.UpsertFunction = func;
 	Leaderboard.UpdateInterval = interval;
+	Leaderboard.TopAmount = topAmount;
 
 	task.spawn(function()
 		while (true) do
 			if (Leaderboard.UpsertFunction) then
-				for i, v in pairs(Leaderboards) do
+				for _, v in pairs(Leaderboards) do
 					Leaderboard.UpsertFunction(v);
-					v:GetTopData(100):andThen(function(data)
+					v:GetTopData(Leaderboard.TopAmount):andThen(function(data)
 						v.LeaderboardUpdated:Fire(data)
 					end);
 				end;
@@ -65,7 +68,7 @@ function Leaderboard:Start(interval: number, func: UpsertFunctionType)
 end
 
 -- Constants
-local SHARD_COUNTS = {
+local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
 	["Daily"] = 10,
 	["Weekly"] = 10,
 	["Monthly"] = 15,
@@ -89,9 +92,16 @@ local function TraverseModifyTable(tbl: {any}, modifyFunc: (...any) -> (), modif
 	end;
 	return tbl;
 end
+
 local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
 	if (leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly") then
 		return "MemoryStore", Shards.new(leaderboardType, serviceKey, SHARD_COUNTS[leaderboardType]);
+	end;
+
+	if (leaderboardType == "Yearly") then
+		local DateTable = os.date("*t", os.time());
+		local CurrentYear = DateTable.year;
+		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{CurrentYear}:{serviceKey}`);
 	end;
 
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);

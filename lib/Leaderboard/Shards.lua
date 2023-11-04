@@ -1,3 +1,4 @@
+-- Instead of one monolithic leaderboard, we can use multiple shards to store the data
 local MemoryStoreService = game:GetService("MemoryStoreService");
 
 local Compression = require(script.Parent.Compression);
@@ -45,28 +46,16 @@ local function FoundInTable(tbl: {any}, value: any)
 	return search(tbl, value)
 end
 
---local test = {
---	{key = 1234324, value = 10},
---	{key = 0, value = 325},
---	{key = 0, value = 5325},
---	{key = 0, value = 34},
---}
-
-----print(FoundInTable(test, 1))
---local FoundIndex, Found = FoundInTable(test, 1234324);
---if (Found) then
---	print(FoundIndex)
---end
-
 local function GetDaysInMonth(month: number, year: number): number
-	local daysInMonth = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+	local DaysInMonth = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 	if (month == 2) then -- This is for a leap year
 		if (year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0)) then
 			return 29; -- Leap year month (29 days)
 		end;
 	end;
-	return daysInMonth[month];
+	return DaysInMonth[month];
 end
+
 local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	local DateTable = os.date("*t", os.time());
 	local DaysInCurrentMonth = GetDaysInMonth(DateTable.month, DateTable.year);

@@ -9,10 +9,10 @@ local AllTimeLeaderboard = LeaderboardModule.new(`AllTime-{Key}`, "AllTime", tru
 local DailyLeaderboard = LeaderboardModule.new(`Daily-{Key}`, "Daily", true);
 local WeeklyLeaderboard = LeaderboardModule.new(`Weekly-{Key}`, "Weekly", true);
 
--- Starts with an interval of 5, and the upsert function as described below
-LeaderboardModule:Start(5, function(leaderboard)
+-- Starts with an interval of 5, collec the top 100, and the upsert function as described below
+LeaderboardModule:Start(5, 100, function(leaderboard)
 	-- In here you'd likely get all the current (TotalValues) in their data, and apply
-	for _, player in pairs(Players:GetPlayers()) do
+	for _, player in Players:GetPlayers() do
 		leaderboard:UpdateData(player.UserId, 10000);
 	end;
 	leaderboard:UpdateData(100, 100);
@@ -44,7 +44,7 @@ end)
 --	DailyLeaderboard:GetTopData(100):andThen(function(topList)
 --		print("DailyTopList", topList);
 --	end);
-	
+
 --	-- Retrieve the top list all time
 --	AllTimeLeaderboard:GetTopData(100):andThen(function(allTimeTopList)
 --		print("AllTimeTopList", allTimeTopList);
