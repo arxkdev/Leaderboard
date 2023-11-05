@@ -16,8 +16,8 @@ local Compression = require(script.Compression);
 
 -- Constants
 local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
-	["Hourly"] = 5,
-	["Daily"] = 10,
+	["Hourly"] = 1,
+	["Daily"] = 3,
 	["Weekly"] = 10,
 	["Monthly"] = 15,
 }
@@ -25,7 +25,7 @@ local DEBUG = false;
 
 -- We support Daily, Weekly, Monthly and AllTime currently
 type Shard = Shards.Shards;
-export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime";
+export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
 export type LeaderboardArguments = {
 	ServiceKey: string,
 	Type: LeaderboardType,
@@ -99,12 +99,17 @@ function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunc
 end
 
 -- Helpers
-local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
-	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly") then
-		return "MemoryStore", Shards.new(leaderboardType, serviceKey, SHARD_COUNTS[leaderboardType]);
-	end;
-
-	if (leaderboardType == "Yearly") then
+local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
+	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
+		local shardCount: number;
+		if leaderboardType == "Rolling" then
+			-- calculate appropriate shard count based on expiry time
+			shardCount = math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5)
+		else
+			shardCount = SHARD_COUNTS[leaderboardType];
+		end
+		return "MemoryStore", Shards.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
+	elseif (leaderboardType == "Yearly") then
 		local DateTable = os.date("*t", os.time());
 		local CurrentYear = DateTable.year;
 		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{CurrentYear}:{serviceKey}`);
@@ -134,7 +139,7 @@ local function GetUserInfosFromId(userId: number): string
 		return UserService:GetUserInfosByUserIdsAsync({userId});
 	end);
 	if (not Success) then
-		warn(`[Leaderboard] had trouble getting user info: {Result}`);
+		warn(`Leaderboard had trouble getting user info: {Result}`);
 		return "Unknown", "Unknown";
 	end;
 	local Username = Result[1] and Result[1].Username or "Unknown";
@@ -143,12 +148,16 @@ local function GetUserInfosFromId(userId: number): string
 	return Username, DisplayName;
 end
 
-function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?)
+function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?, rollingExpiry: number?)
+	if (leaderboardType == "Rolling" and rollingExpiry ~= nil) then
+		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= 3888000, "rolling expiry must be within 60 and 3888000 seconds")
+	end
+
 	local self = setmetatable({} :: LeaderboardArguments, Leaderboard);
 
 	self.ServiceKey = serviceKey;
 	self.Type = leaderboardType;
-	self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
+	self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
 	self.LeaderboardUpdated = Signal.new();
 
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
@@ -165,17 +174,12 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	end;
 
 	if (handleUpsertAndRetrieval) then
-		dPrint(`Leaderboard {serviceKey} is being handled automatically.`);
+		dPrint(`Leaderboard ${serviceKey} is being handled automatically.`);
 		Leaderboards[serviceKey] = self;
 	end;
 	return self;
 end
 
---[=[
-	Gets the top amount of data from the leaderboard
-	@param amount number The amount of data to get (max 100)
-	@return Promise
-]=]
 function Leaderboard:GetTopData(amount)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
@@ -206,7 +210,7 @@ function Leaderboard:GetTopData(amount)
 		local success, data = pcall(PromiseRetrieveTopData);
 
 		if (success) then
-			dPrint(`Successfully retrieved top data for {self.ServiceKey}`);
+			dPrint(`Successfully retrieved top data for ${self.ServiceKey}`);
 			resolve(data);
 		else
 			warn(success, data);
@@ -215,11 +219,6 @@ function Leaderboard:GetTopData(amount)
 	end);
 end
 
---[=[
-	Updates the data for a specific user
-	@param userId number The userId to update
-	@param transformer number | (number) -> (number) The transformer to use
-]=]
 function Leaderboard:UpdateData(userId, transformer)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(transformer) == "function" or type(transformer) == "number", "Transformer must be a function or a number");
@@ -227,7 +226,7 @@ function Leaderboard:UpdateData(userId, transformer)
 	-- If we are using a MemoryStore, we can just update the data
 	if (self.StoreType == "MemoryStore") then
 		self.Store:UpdateData(userId, transformer);
-		dPrint(`Successfully updated data for {userId} in {self.ServiceKey}`);
+		dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
 		return;
 	end;
 
@@ -247,12 +246,9 @@ function Leaderboard:UpdateData(userId, transformer)
 		warn(`Leaderboard had trouble saving: {Error}`);
 	end;
 
-	dPrint(`Successfully updated data for {userId} in {self.ServiceKey}`);
+	dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
 end
 
---[=[
-	Destroys the leaderboard
-]=]
 function Leaderboard:Destroy()
 	if (Leaderboards[self.ServiceKey]) then
 		Leaderboards[self.ServiceKey] = nil;
