@@ -29,7 +29,7 @@ export type TopData = {
 
 type Object = {
 	__index: Object,
-	UpdateData: (self: Shards, userId: number, value: number) -> (),
+	UpdateData: (self: Shards, userId: number, transformer: number | (number) -> (number)) -> (),
 	GetTopData: (self: Shards, amount: number, sortDirection: Enum.SortDirection) -> {TopData},
 	GetShardKey: (self: Shards, userId: number) -> (number),
 	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> Shards,
@@ -146,29 +146,28 @@ function Shards:GetShardKey(userId)
 	return ShardIndex;
 end
 
-function Shards:UpdateData(userId, value)
+function Shards:UpdateData(userId, transformer)
 	SmartAssert(userId, "userId must be provided");
-	SmartAssert(value, "value must be provided");
+	SmartAssert(transformer, "transformer must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
-	SmartAssert(typeof(value) == "number", "value must be a number");
+	SmartAssert(typeof(transformer) == "function" or typeof(transformer) == "number", "transformer must be a function or a number");
 
-	-- Get the compressed value, ShardKey and the shard of the memory map
-	local CompressedValue = Compression.Compress(value);
+	-- Get the shard key, and the shard
 	local ShardKey = self:GetShardKey(userId);
 	local Shard = self.Shards[ShardKey] or self.Shards[1];
 
-	local Success, NewData, _ = pcall(function()
+	local Success, NewData = pcall(function()
 		return Shard:UpdateAsync(
 			tostring(userId),
-			function(oldValue, oldSortKey)
+			function(oldValue)
 				oldValue = oldValue or 0;
-				oldSortKey = oldSortKey or 0;
-				local newValue = CompressedValue;
-				local newSortKey = value;
-				if (newValue and newSortKey) then
-					return newValue, newSortKey;
+				local transformedValue = (typeof(transformer) == "function") and transformer(oldValue) or transformer;
+				local compressedValue = Compression.Compress(transformedValue);
+				local newSortKey = transformedValue;
+				if (compressedValue and newSortKey) then
+					return compressedValue, newSortKey;
 				end;
-				return nil
+				return nil;
 			end,
 			GetExpiry(self.Type) or self.FallbackExpiry
 		);

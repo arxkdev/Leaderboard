@@ -47,7 +47,7 @@ type Object = {
 	TopAmount: number,
 	UpsertFunction: ((Leaderboard) -> ())?,
 	Start: (self: Object, topAmount: number, interval: number, func: (Leaderboard) -> ()) -> (),
-	UpdateData: (self: Leaderboard, userId: number, value: number) -> (),
+	UpdateData: (self: Leaderboard, userId: number, transformer: number | (number) -> (number)) -> (),
 	GetTopData: (self: Leaderboard, amount: number) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?) -> Leaderboard,
@@ -210,21 +210,28 @@ function Leaderboard:GetTopData(amount)
 	end);
 end
 
-function Leaderboard:UpdateData(userId, value) : ()
+function Leaderboard:UpdateData(userId, transformer)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
-	SmartAssert(type(value) == "number", "Value must be a number");
-	local CompressedValue = Compression.Compress(value);
+	SmartAssert(type(transformer) == "function" or type(transformer) == "number", "Transformer must be a function or a number");
 
 	-- If we are using a MemoryStore, we can just update the data
 	if (self.StoreType == "MemoryStore") then
-		self.Store:UpdateData(userId, value);
+		self.Store:UpdateData(userId, transformer);
 		dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
 		return;
 	end;
 
 	-- Using an actual DataStore, we need to set the data
 	local Success, Error = pcall(function()
-		self.Store:SetAsync(userId, CompressedValue);
+		self.Store:UpdateAsync(userId, function(oldValue)
+			oldValue = oldValue or 0;
+			local transformedValue = (type(transformer) == "function") and transformer(oldValue) or transformer;
+			local compressedValue = Compression.Compress(transformedValue);
+			if (compressedValue) then
+				return compressedValue;
+			end;
+			return nil;
+		end);
 	end);
 	if (not Success) then
 		warn(`Leaderboard had trouble saving: {Error}`);
