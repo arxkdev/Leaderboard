@@ -12,7 +12,7 @@ local FALLBACK_EXPIRY_TIMES = {
 }
 local DEBUG = false;
 
-export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime";
+export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime" | "Rolling";
 export type LeaderboardArguments = {
 	Type: LeaderboardType,
 	FallbackExpiry: number,
@@ -78,6 +78,11 @@ local function GetDaysInMonth(month: number, year: number): number
 end
 
 local function GetExpiry(leaderboardType: LeaderboardType): number | nil
+	if (leaderboardType == "Rolling") then
+		-- rolling expiry is dynamic so we can't return a fixed value
+		return nil
+	end
+
 	local DateTimeNow = DateTime.now();
 	local DateTable = DateTimeNow:ToUniversalTime();
 	local CurrentDayOfWeek = (math.floor(DateTimeNow.UnixTimestamp / 86400) + 4) % 7 + 1;
@@ -118,27 +123,30 @@ local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	return nil;
 end
 
-function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number)
+function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?)
 	local self = setmetatable({} :: LeaderboardArguments, Shards);
 	self.Shards = {};
 
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
 		self.Shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
-		dPrint(`Created a shared (MemoryMap) with the name of {serviceKey}_Shard${i}`);
+		dPrint("Created MemoryStoreSortedMap for shard", i);
 	end;
 
 	self.ShardCount = shardCount
 	self.Type = leaderboardType;
-	self.FallbackExpiry = self.Type == "Monthly" and GetDaysInMonth(os.date("*t", os.time()).month, os.date("*t", os.time()).year) * 24 * 3600 or FALLBACK_EXPIRY_TIMES[self.Type];
+
+	if (leaderboardType == "Rolling" and rollingExpiry ~= nil) then
+		self.FallbackExpiry = rollingExpiry
+	elseif (leaderboardType == "Monthly") then
+		self.FallbackExpiry = GetDaysInMonth(os.date("*t", os.time()).month, os.date("*t", os.time()).year) * 24 * 3600
+	else
+		self.FallbackExpiry = FALLBACK_EXPIRY_TIMES[self.Type];
+	end
+
 	return self;
 end
 
---[=[
-	Gets the shard key for a userId
-	@param userId number The userId to get the shard key for
-	@return number
-]=]
 function Shards:GetShardKey(userId)
 	SmartAssert(userId, "userId must be provided");
 
@@ -151,37 +159,53 @@ function Shards:GetShardKey(userId)
 	return ShardIndex;
 end
 
---[=[
-	Update the data for a userId
-	@param userId number The userId to update the data for
-	@param transformer number | (number) -> (number) The transformer to use to update the data
-	@return boolean
-]=]
 function Shards:UpdateData(userId, transformer)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(transformer, "transformer must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
 	SmartAssert(typeof(transformer) == "function" or typeof(transformer) == "number", "transformer must be a function or a number");
 
-	-- Get the shard key, and the shard
+	-- Get the shard key, shard, leaderboard type, and user key
 	local ShardKey = self:GetShardKey(userId);
 	local Shard = self.Shards[ShardKey] or self.Shards[1];
+	local LeaderboardType = self.Type
+	local Key = tostring(userId)
 
 	local Success, NewData = pcall(function()
-		return Shard:UpdateAsync(
-			tostring(userId),
-			function(oldValue)
-				oldValue = oldValue or 0;
-				local transformedValue = (typeof(transformer) == "function") and transformer(oldValue) or transformer;
-				local compressedValue = Compression.Compress(transformedValue);
-				local newSortKey = transformedValue;
-				if (compressedValue and newSortKey) then
-					return compressedValue, newSortKey;
-				end;
-				return nil;
-			end,
-			GetExpiry(self.Type) or self.FallbackExpiry
-		);
+		if (LeaderboardType == "Rolling") then
+			local oldValue = Shard:GetAsync(Key)
+			local firstTime = oldValue == nil
+			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value)
+
+			local transformedValue = (typeof(transformer) == "function" and transformer(oldValue) or transformer)
+			local compressedValue = Compression.Compress(transformedValue)
+			local newSortKey = transformedValue
+
+			local newValue = {
+				value = compressedValue, -- this will be the value we save, we need to save as table to carry over creation data
+				__created = if (typeof(oldValue) ~= "table") then os.time() else oldValue.__created,
+				__expiry = self.FallbackExpiry
+			}
+			-- update the value with appropriate expiry time left
+			Shard:SetAsync(Key, newValue, newValue.__expiry - (os.time() - newValue.__created), newSortKey)
+			-- share same format as UpdateAsync
+			return compressedValue, newSortKey
+		else
+			return Shard:UpdateAsync(
+				Key,
+				function(oldValue)
+					oldValue = oldValue or 0;
+					local transformedValue = (typeof(transformer) == "function") and transformer(oldValue) or transformer;
+					local compressedValue = Compression.Compress(transformedValue);
+					local newSortKey = transformedValue;
+					if (compressedValue and newSortKey) then
+						return compressedValue, newSortKey;
+					end;
+					return nil;
+				end,
+				GetExpiry(LeaderboardType) or self.FallbackExpiry
+			);
+		end
 	end);
 
 	if (not Success) then
@@ -192,12 +216,6 @@ function Shards:UpdateData(userId, transformer)
 	return true;
 end
 
---[=[
-	Gets the top data for the leaderboard
-	@param topAmount number The amount of data to get
-	@param sortDirection Enum.SortDirection The sort direction to use
-	@return {TopData}
-]=]
 function Shards:GetTopData(topAmount, sortDirection)
 	SmartAssert(topAmount, "topAmount must be provided");
 	SmartAssert(sortDirection, "sortDirection must be provided");
@@ -208,10 +226,17 @@ function Shards:GetTopData(topAmount, sortDirection)
 	-- Go through the shards, extract the data, and combine it
 	for _, shard in self.Shards do
 		local success, result = pcall(function()
-			return shard:GetRangeAsync(
+			local data = shard:GetRangeAsync(
 				sortDirection,
 				topAmount
 			);
+			if (self.Type == "Rolling") then
+				for _, entry in data do
+					-- get rid of expiry and creation date padding, convert back to number
+					entry.value = tonumber(entry.value.value)
+				end
+			end
+			return data
 		end);
 
 		if (success and result) then
