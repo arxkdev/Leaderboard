@@ -34,11 +34,11 @@ export type LeaderboardArguments = {
 	LeaderboardUpdated: Signal.Signal<{TopData}>,
 }
 export type TopData = {
-	rank: number,
-	key: number,
-	value: number,
-	username: string,
-	displayName: string,
+	Rank: number,
+	UserId: number,
+	Value: number,
+	Username: string,
+	DisplayName: string,
 }
 
 type Object = {
@@ -179,18 +179,19 @@ function Leaderboard:GetTopData(amount)
 		if (self.StoreType == "MemoryStore") then
 			local data = self.Store:GetTopData(amount, Enum.SortDirection.Descending);
 			for rank, v in data do
-				v.rank = rank;
-				v.value = Compression.Decompress(v.value);
-				v.username, v.displayName = GetUserInfosFromId(v.key);
+				v.Rank = rank;
+				v.Value = Compression.Decompress(v.Value);
+				v.Username, v.DisplayName = GetUserInfosFromId(v.UserId);
 			end;
 			return data;
 		else
 			local result = self.Store:GetSortedAsync(false, amount);
-			local data = result:GetCurrentPage();
+			local data = result:GetCurrentPage() :: {any}
 			for rank, v in data do
-				v.rank = rank;
-				v.value = Compression.Decompress(v.value);
-				v.username, v.displayName = GetUserInfosFromId(v.key);
+				v.UserId, v.Rank = v.key, rank;
+				v.Value = Compression.Decompress(v.value);
+				v.Username, v.DisplayName = GetUserInfosFromId(v.key);
+				v.key, v.value = nil, nil;
 			end;
 			return data;
 		end;
@@ -214,12 +215,14 @@ function Leaderboard:UpdateData(userId, value) : ()
 	SmartAssert(type(value) == "number", "Value must be a number");
 	local CompressedValue = Compression.Compress(value);
 
+	-- If we are using a MemoryStore, we can just update the data
 	if (self.StoreType == "MemoryStore") then
 		self.Store:UpdateData(userId, value);
 		dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
 		return;
 	end;
 
+	-- Using an actual DataStore, we need to set the data
 	local Success, Error = pcall(function()
 		self.Store:SetAsync(userId, CompressedValue);
 	end);

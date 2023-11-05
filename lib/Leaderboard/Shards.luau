@@ -20,11 +20,11 @@ export type LeaderboardArguments = {
 	ShardCount: number,
 }
 export type TopData = {
-	rank: number,
-	key: number,
-	value: number,
-	username: string,
-	displayName: string,
+	Rank: number,
+	UserId: number,
+	Value: number,
+	Username: string,
+	DisplayName: string,
 }
 
 type Object = {
@@ -151,18 +151,19 @@ function Shards:UpdateData(userId, value)
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
 	SmartAssert(typeof(value) == "number", "value must be a number");
 
-	local compressedValue = Compression.Compress(value);
-	local shardKey = self:GetShardKey(userId);
-	local shard = self.Shards[shardKey];
+	-- Get the compressed value, ShardKey and the shard of the memory map
+	local CompressedValue = Compression.Compress(value);
+	local ShardKey = self:GetShardKey(userId);
+	local Shard = self.Shards[ShardKey] or self.Shards[1];
 
 	local success, newData, _ = pcall(function()
-		return shard:UpdateAsync(
+		return Shard:UpdateAsync(
 			tostring(userId),
 			function(oldValue, oldSortKey)
 				-- oldValue is the current score, oldSortKey is the sort key previously stored
 				oldValue = oldValue or 0;
 				oldSortKey = oldSortKey or 0;
-				local newValue = compressedValue;
+				local newValue = CompressedValue;
 
 				-- If newValue is valid, then update the sort key and value
 				if (newValue) then
@@ -178,7 +179,10 @@ function Shards:UpdateData(userId, value)
 
 	if (not success) then
 		warn(newData);
+		return false;
 	end;
+
+	return true;
 end
 
 function Shards:GetTopData(topAmount, sortDirection)
@@ -188,6 +192,7 @@ function Shards:GetTopData(topAmount, sortDirection)
 	SmartAssert(typeof(sortDirection) == "EnumItem", "sortDirection must be an Enum.SortDirection");
 	local CombinedResults = {};
 
+	-- Go through the shards, extract the data, and combine it
 	for _, shard in self.Shards do
 		local success, result = pcall(function()
 			return shard:GetRangeAsync(
@@ -200,16 +205,16 @@ function Shards:GetTopData(topAmount, sortDirection)
 			for _, entry in result do
 				local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
 				if (Found) then
-					local FoundValueHigherThanCurrent = (Found.value > entry.value);
+					local FoundValueHigherThanCurrent = (Found.Value > entry.value);
 					if (not FoundValueHigherThanCurrent) then
 						-- The found value already there, is LOWER than this new one, update it
-						CombinedResults[IndexFound].value = entry.value;
+						CombinedResults[IndexFound].Value = entry.value;
 					end;
 				else
 					-- There is no found value, add it to the combined results
 					table.insert(CombinedResults, {
-						key = tonumber(entry.key),
-						value = entry.value
+						UserId = tonumber(entry.key),
+						Value = entry.value
 					});
 				end;
 			end;
@@ -218,10 +223,12 @@ function Shards:GetTopData(topAmount, sortDirection)
 		end;
 	end;
 
+	-- Sort it
 	table.sort(CombinedResults, function(a, b)
-		return a.value > b.value;
+		return a.Value > b.Value;
 	end);
 
+	-- Take off excess
 	if (#CombinedResults > topAmount) then
 		for i = #CombinedResults, topAmount + 1, -1 do
 			table.remove(CombinedResults, i);

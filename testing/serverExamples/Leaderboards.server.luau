@@ -33,9 +33,9 @@ local function UpdateBoard(data: {LeaderboardModule.TopData}, model: Model)
 	for i, v in data do
 		local item = LeaderboardTemplate:Clone();
 		item.Name = `Item-${i}`;
-		item.Rank.Text = v.rank;
-		item.Username.Text = `@{v.displayName}`;
-		item["Value"].Text = v.value;
+		item.Rank.Text = v.Rank;
+		item.Username.Text = `@{v.DisplayName}`;
+		item["Value"].Text = v.Value;
 		item.Parent = model.BoardPart.UI.List;
 	end;
 end
