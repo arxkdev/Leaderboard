@@ -134,7 +134,7 @@ local function GetUserInfosFromId(userId: number): string
 		return UserService:GetUserInfosByUserIdsAsync({userId});
 	end);
 	if (not Success) then
-		warn(`Leaderboard had trouble getting user info: {Result}`);
+		warn(`[Leaderboard] had trouble getting user info: {Result}`);
 		return "Unknown", "Unknown";
 	end;
 	local Username = Result[1] and Result[1].Username or "Unknown";
@@ -165,12 +165,16 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	end;
 
 	if (handleUpsertAndRetrieval) then
-		dPrint(`Leaderboard ${serviceKey} is being handled automatically.`);
+		dPrint(`Leaderboard {serviceKey} is being handled automatically.`);
 		Leaderboards[serviceKey] = self;
 	end;
 	return self;
 end
 
+--[[
+	Gets the top amount of data from the leaderboard
+	@param amount number The amount of data to get (max 100)
+--]]
 function Leaderboard:GetTopData(amount)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
@@ -201,7 +205,7 @@ function Leaderboard:GetTopData(amount)
 		local success, data = pcall(PromiseRetrieveTopData);
 
 		if (success) then
-			dPrint(`Successfully retrieved top data for ${self.ServiceKey}`);
+			dPrint(`Successfully retrieved top data for {self.ServiceKey}`);
 			resolve(data);
 		else
 			warn(success, data);
@@ -210,6 +214,11 @@ function Leaderboard:GetTopData(amount)
 	end);
 end
 
+--[[
+	Updates the data for a specific user
+	@param userId number The userId to update
+	@param transformer number | (number) -> (number) The transformer to use
+--]]
 function Leaderboard:UpdateData(userId, transformer)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(transformer) == "function" or type(transformer) == "number", "Transformer must be a function or a number");
@@ -217,7 +226,7 @@ function Leaderboard:UpdateData(userId, transformer)
 	-- If we are using a MemoryStore, we can just update the data
 	if (self.StoreType == "MemoryStore") then
 		self.Store:UpdateData(userId, transformer);
-		dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
+		dPrint(`Successfully updated data for {userId} in {self.ServiceKey}`);
 		return;
 	end;
 
@@ -237,9 +246,12 @@ function Leaderboard:UpdateData(userId, transformer)
 		warn(`Leaderboard had trouble saving: {Error}`);
 	end;
 
-	dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
+	dPrint(`Successfully updated data for {userId} in {self.ServiceKey}`);
 end
 
+--[[
+	Destroys the leaderboard
+--]]
 function Leaderboard:Destroy()
 	if (Leaderboards[self.ServiceKey]) then
 		Leaderboards[self.ServiceKey] = nil;

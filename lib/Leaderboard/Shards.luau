@@ -125,7 +125,7 @@ function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardC
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
 		self.Shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
-		dPrint("Created MemoryStoreSortedMap for shard", i);
+		dPrint(`Created a shared (MemoryMap) with the name of {serviceKey}_Shard${i}`);
 	end;
 
 	self.ShardCount = shardCount
@@ -134,6 +134,11 @@ function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardC
 	return self;
 end
 
+--[[
+	Gets the shard key for a userId
+	@param userId number The userId to get the shard key for
+	@return number
+]]
 function Shards:GetShardKey(userId)
 	SmartAssert(userId, "userId must be provided");
 
@@ -146,6 +151,12 @@ function Shards:GetShardKey(userId)
 	return ShardIndex;
 end
 
+--[[
+	Update the data for a userId
+	@param userId number The userId to update the data for
+	@param transformer number | (number) -> (number) The transformer to use to update the data
+	@return boolean
+]]
 function Shards:UpdateData(userId, transformer)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(transformer, "transformer must be provided");
@@ -181,6 +192,12 @@ function Shards:UpdateData(userId, transformer)
 	return true;
 end
 
+--[[
+	Gets the top data for the leaderboard
+	@param topAmount number The amount of data to get
+	@param sortDirection Enum.SortDirection The sort direction to use
+	@return {TopData}
+]]
 function Shards:GetTopData(topAmount, sortDirection)
 	SmartAssert(topAmount, "topAmount must be provided");
 	SmartAssert(sortDirection, "sortDirection must be provided");

@@ -5,6 +5,8 @@ local LeaderboardTemplate = ReplicatedStorage:WaitForChild("LeaderboardTemplate"
 local Lib = ReplicatedStorage:WaitForChild("lib");
 local Leaderboard = require(Lib.Leaderboard);
 
+type TopData = {Leaderboard.TopData};
+
 local Key = 1;
 local AllTimeLeaderboard = Leaderboard.new(`AllTime-{Key}`, "AllTime", true);
 local HourlyLeaderboard = Leaderboard.new(`Hourly-{Key}`, "Hourly", true);
@@ -22,7 +24,7 @@ Leaderboard:Start(120, 100, function(leaderboard)
 	leaderboard:UpdateData(101, 1010);
 end)
 
-local function UpdateBoard(data: {Leaderboard.TopData}, model: Model)
+local function UpdateBoard(data: TopData, model: Model)
 	-- Remove current items
 	for _, v in model.BoardPart.UI.List:GetChildren() do
 		if (not v:IsA("GuiObject")) then continue end;
