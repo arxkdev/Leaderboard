@@ -45,7 +45,7 @@ local function dPrint(...)
 end
 
 local function FoundInTable(tbl: {any}, value: any)
-	local function search(t, val)
+	local function search(t: {any}, val: any)
 		for index, v in pairs(t) do
 			if (v == val) then
 				return index, v;
