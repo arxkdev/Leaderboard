@@ -45,9 +45,15 @@ local function dPrint(...)
 	end;
 end
 
+local function SmartAssert(condition: boolean, message: string)
+	if (not condition) then
+		error(message, 2);
+	end;
+end
+
 local function FoundInTable(tbl: {any}, value: any)
 	local function search(t: {any}, val: any)
-		for index, v in pairs(t) do
+		for index, v in t do
 			if (v == val) then
 				return index, v;
 			elseif (type(v) == "table") then
@@ -113,7 +119,6 @@ end
 
 function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number)
 	local self = setmetatable({} :: LeaderboardArguments, Shards);
-
 	self.Shards = {};
 
 	for i = 1, shardCount do
@@ -124,12 +129,13 @@ function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardC
 
 	self.ShardCount = shardCount
 	self.Type = leaderboardType;
-	self.FallbackExpiry = FALLBACK_EXPIRY_TIMES[self.Type];
-
+	self.FallbackExpiry = self.Type == "Monthly" and GetDaysInMonth(os.date("*t", os.time()).month, os.date("*t", os.time()).year) * 24 * 3600 or FALLBACK_EXPIRY_TIMES[self.Type];
 	return self;
 end
 
 function Shards:GetShardKey(userId)
+	SmartAssert(userId, "userId must be provided");
+
 	-- Get the SHA-256 hash of the userId
 	local ShaHash = HashLib.sha1(tostring(userId));
 	local HashPrefix = tonumber(string.sub(ShaHash, 1, 8), 16);
@@ -140,6 +146,11 @@ function Shards:GetShardKey(userId)
 end
 
 function Shards:UpdateData(userId, value)
+	SmartAssert(userId, "userId must be provided");
+	SmartAssert(value, "value must be provided");
+	SmartAssert(typeof(userId) == "number", "userId must be a number");
+	SmartAssert(typeof(value) == "number", "value must be a number");
+
 	local compressedValue = Compression.Compress(value);
 	local shardKey = self:GetShardKey(userId);
 	local shard = self.Shards[shardKey];
@@ -149,14 +160,15 @@ function Shards:UpdateData(userId, value)
 			tostring(userId),
 			function(oldValue, oldSortKey)
 				-- oldValue is the current score, oldSortKey is the sort key previously stored
-				oldValue = oldValue or 0
-				local newValue = compressedValue
+				oldValue = oldValue or 0;
+				oldSortKey = oldSortKey or 0;
+				local newValue = compressedValue;
 
 				-- If newValue is valid, then update the sort key and value
-				if newValue then
-					local newSortKey = newValue -- Assuming the value is the score for sorting
-					return newValue, newSortKey
-				end
+				if (newValue) then
+					local newSortKey = newValue; -- Assuming the value is the score for sorting
+					return newValue, newSortKey;
+				end;
 				-- If newValue is not valid, do not update
 				return nil
 			end,
@@ -170,9 +182,13 @@ function Shards:UpdateData(userId, value)
 end
 
 function Shards:GetTopData(topAmount, sortDirection)
+	SmartAssert(topAmount, "topAmount must be provided");
+	SmartAssert(sortDirection, "sortDirection must be provided");
+	SmartAssert(typeof(topAmount) == "number", "topAmount must be a number");
+	SmartAssert(typeof(sortDirection) == "EnumItem", "sortDirection must be an Enum.SortDirection");
 	local CombinedResults = {};
 
-	for _, shard in ipairs(self.Shards) do
+	for _, shard in self.Shards do
 		local success, result = pcall(function()
 			return shard:GetRangeAsync(
 				sortDirection,
@@ -181,7 +197,7 @@ function Shards:GetTopData(topAmount, sortDirection)
 		end);
 
 		if (success and result) then
-			for _, entry in ipairs(result) do
+			for _, entry in result do
 				local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
 				if (Found) then
 					local FoundValueHigherThanCurrent = (Found.value > entry.value);

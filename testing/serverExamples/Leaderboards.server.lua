@@ -24,13 +24,13 @@ end)
 
 local function UpdateBoard(data: {LeaderboardModule.TopData}, model: Model)
 	-- Remove current items
-	for _, v in pairs(model.BoardPart.UI.List:GetChildren()) do
+	for _, v in model.BoardPart.UI.List:GetChildren() do
 		if (not v:IsA("GuiObject")) then continue end;
 		v:Destroy();
 	end;
 
 	-- Add new items
-	for i, v in pairs(data) do
+	for i, v in data do
 		local item = LeaderboardTemplate:Clone();
 		item.Name = `Item-${i}`;
 		item.Rank.Text = v.rank;
@@ -67,7 +67,7 @@ end)
 
 --local function UpdateLeaderboards()
 --	-- Set the stats
---	for _, player in pairs(Players:GetPlayers()) do
+--	for _, player in Players:GetPlayers() do
 --		DailyLeaderboard:UpdateData(player.UserId, 10);
 --		AllTimeLeaderboard:UpdateData(player.UserId, 10);
 --	end;

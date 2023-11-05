@@ -72,6 +72,12 @@ local function dPrint(...)
 	end;
 end
 
+local function SmartAssert(condition: boolean, message: string)
+	if (not condition) then
+		error(message, 2);
+	end;
+end
+
 function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunctionType)
 	Leaderboard.UpsertFunction = func;
 	Leaderboard.UpdateInterval = interval;
@@ -80,7 +86,7 @@ function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunc
 	task.spawn(function()
 		while (true) do
 			if (Leaderboard.UpsertFunction) then
-				for _, v in pairs(Leaderboards) do
+				for _, v in Leaderboards do
 					pcall(Leaderboard.UpsertFunction, v);
 					v:GetTopData(Leaderboard.TopAmount):andThen(function(data)
 						v.LeaderboardUpdated:Fire(data)
@@ -166,13 +172,13 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 end
 
 function Leaderboard:GetTopData(amount)
-	assert(type(amount) == "number", "Amount must be a number");
-	assert(amount <= 100, "You can only get the top 100.");
+	SmartAssert(type(amount) == "number", "Amount must be a number");
+	SmartAssert(amount <= 100, "You can only get the top 100.");
 
 	local function PromiseRetrieveTopData()
 		if (self.StoreType == "MemoryStore") then
 			local data = self.Store:GetTopData(amount, Enum.SortDirection.Descending);
-			for rank, v in pairs(data) do
+			for rank, v in data do
 				v.rank = rank;
 				v.value = Compression.Decompress(v.value);
 				v.username, v.displayName = GetUserInfosFromId(v.key);
@@ -181,7 +187,7 @@ function Leaderboard:GetTopData(amount)
 		else
 			local result = self.Store:GetSortedAsync(false, amount);
 			local data = result:GetCurrentPage();
-			for rank, v in pairs(data) do
+			for rank, v in data do
 				v.rank = rank;
 				v.value = Compression.Decompress(v.value);
 				v.username, v.displayName = GetUserInfosFromId(v.key);
@@ -204,8 +210,8 @@ function Leaderboard:GetTopData(amount)
 end
 
 function Leaderboard:UpdateData(userId, value) : ()
-	assert(type(userId) == "number", "UserId must be a number");
-	assert(type(value) == "number", "Value must be a number");
+	SmartAssert(type(userId) == "number", "UserId must be a number");
+	SmartAssert(type(value) == "number", "Value must be a number");
 	local CompressedValue = Compression.Compress(value);
 
 	if (self.StoreType == "MemoryStore") then

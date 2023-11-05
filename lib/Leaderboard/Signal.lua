@@ -22,7 +22,7 @@ export type Connection = {
 	Connected: boolean,
 }
 
-export type Signal<T...> = {
+export type Signal<T> = {
 	Fire: (self: Signal<T...>, T...) -> (),
 	FireDeferred: (self: Signal<T...>, T...) -> (),
 	Connect: (self: Signal<...T>, fn: (...T) -> ()) -> Connection,

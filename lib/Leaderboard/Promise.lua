@@ -30,7 +30,7 @@ export type Promise = {
 	timeout: (self: Promise, seconds: number, rejectionValue: any?) -> Promise,
 }
 
-export type TypedPromise<T...> = {
+export type TypedPromise<T> = {
 	andThen: (
         self: TypedPromise<T...>,
         successHandler: (result: T) -> ...any,
