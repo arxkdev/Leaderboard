@@ -1,16 +1,19 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage");
 local Players = game:GetService("Players");
 
+local LeaderboardTemplate = ReplicatedStorage:WaitForChild("LeaderboardTemplate");
 local Lib = ReplicatedStorage:WaitForChild("lib");
 local LeaderboardModule = require(Lib.Leaderboard);
 
 local Key = 1;
 local AllTimeLeaderboard = LeaderboardModule.new(`AllTime-{Key}`, "AllTime", true);
+local HourlyLeaderboard = LeaderboardModule.new(`Hourly-{Key}`, "Hourly", true);
 local DailyLeaderboard = LeaderboardModule.new(`Daily-{Key}`, "Daily", true);
 local WeeklyLeaderboard = LeaderboardModule.new(`Weekly-{Key}`, "Weekly", true);
+local MonthlyLeaderboard = LeaderboardModule.new(`Monthly-{Key}`, "Monthly", true);
 
 -- Starts with an interval of 5, collec the top 100, and the upsert function as described below
-LeaderboardModule:Start(5, 100, function(leaderboard)
+LeaderboardModule:Start(120, 100, function(leaderboard)
 	-- In here you'd likely get all the current (TotalValues) in their data, and apply
 	for _, player in Players:GetPlayers() do
 		leaderboard:UpdateData(player.UserId, 10000);
@@ -19,16 +22,48 @@ LeaderboardModule:Start(5, 100, function(leaderboard)
 	leaderboard:UpdateData(101, 1010);
 end)
 
+local function UpdateBoard(data: {any}, model: Model)
+	-- Remove current items
+	for _, v in pairs(model.BoardPart.UI.List:GetChildren()) do
+		if (v:IsA("GuiObject")) then
+			v:Destroy();
+		end;
+	end;
+
+	-- Add new items
+	for i, v in pairs(data) do
+		local item = LeaderboardTemplate:Clone();
+		item.Name = i;
+		item.Rank.Text = i;
+		item.Username.Text = v.username;
+		item["Value"].Text = v.value;
+		item.Parent = model.BoardPart.UI.List;
+	end;
+end
+
 AllTimeLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
 	print("AllTime", leaderboardTop);
+	UpdateBoard(leaderboardTop, workspace.Leaderboards.AllTime);
+end)
+
+HourlyLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
+	print("Hourly", leaderboardTop);
+	UpdateBoard(leaderboardTop, workspace.Leaderboards.Hourly);
 end)
 
 DailyLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
 	print("Daily", leaderboardTop);
+	UpdateBoard(leaderboardTop, workspace.Leaderboards.Daily);
 end)
 
 WeeklyLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
 	print("Weekly", leaderboardTop);
+	UpdateBoard(leaderboardTop, workspace.Leaderboards.Weekly);
+end)
+
+MonthlyLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
+	print("Monthly", leaderboardTop);
+	UpdateBoard(leaderboardTop, workspace.Leaderboards.Monthly);
 end)
 
 --local function UpdateLeaderboards()

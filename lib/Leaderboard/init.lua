@@ -13,15 +13,23 @@ local Signal = require(script.Signal);
 local Shards = require(script.Shards);
 local Compression = require(script.Compression);
 
+-- Constants
+local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
+	["Hourly"] = 5,
+	["Daily"] = 10,
+	["Weekly"] = 10,
+	["Monthly"] = 15,
+}
+local DEBUG = true;
+
 -- We support Daily, Weekly, Monthly and AllTime currently
 type Shard = Shards.Shards;
-export type LeaderboardType = "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime";
+export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime";
 export type LeaderboardArguments = {
 	ServiceKey: string,
 	Type: LeaderboardType,
 	StoreUsing: string,
 	Store: MemoryStoreSortedMap | OrderedDataStore | Shard,
-	FallbackExpiry: number,
 	LeaderboardUpdated: Signal.Signal<...any>,
 }
 export type TopData = {
@@ -56,6 +64,12 @@ Leaderboard.UpsertFunction = nil;
 Leaderboard.UpdateInterval = 120; -- Default to 2 minutes
 Leaderboard.TopAmount = 100; -- Default to 100
 
+local function dPrint(...)
+	if (DEBUG) then
+		warn(`[Leaderboard]`, ...);
+	end;
+end
+
 function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunctionType)
 	Leaderboard.UpsertFunction = func;
 	Leaderboard.UpdateInterval = interval;
@@ -76,21 +90,9 @@ function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunc
 	end);
 end
 
--- Constants
-local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
-	["Daily"] = 10,
-	["Weekly"] = 10,
-	["Monthly"] = 15,
-}
-local FALLBACK_EXPIRY_TIMES = {
-	["Daily"] = 86400,
-	["Weekly"] = 604800,
-	["Monthly"] = 2.628e+6,
-}
-
 -- Helpers
 local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
-	if (leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly") then
+	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly") then
 		return "MemoryStore", Shards.new(leaderboardType, serviceKey, SHARD_COUNTS[leaderboardType]);
 	end;
 
@@ -139,10 +141,10 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	self.ServiceKey = serviceKey;
 	self.Type = leaderboardType;
 	self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
-	self.FallbackExpiry = FALLBACK_EXPIRY_TIMES[self.Type];
 	self.LeaderboardUpdated = Signal.new();
 
 	if (handleUpsertAndRetrieval) then
+		dPrint(`Leaderboard ${serviceKey} is being handled automatically.`);
 		Leaderboards[serviceKey] = self;
 	end;
 	return self;
@@ -155,21 +157,19 @@ function Leaderboard:GetTopData(amount)
 	local function PromiseRetrieveTopData()
 		if (self.StoreType == "MemoryStore") then
 			local data = self.Store:GetTopData(amount, Enum.SortDirection.Descending);
-			for _, v in pairs(data) do
-				local Username, DisplayName = GetUserInfosFromId(v.key);
+			for rank, v in pairs(data) do
+				v.rank = rank;
 				v.value = Compression.Decompress(v.value);
-				v.username = Username;
-				v.displayName = DisplayName;
+				v.username, v.displayName = GetUserInfosFromId(v.key);
 			end;
 			return data;
 		else
 			local result = self.Store:GetSortedAsync(false, amount);
 			local data = result:GetCurrentPage();
-			for _, v in pairs(data) do
-				local Username, DisplayName = GetUserInfosFromId(v.key);
+			for rank, v in pairs(data) do
+				v.rank = rank;
 				v.value = Compression.Decompress(v.value);
-				v.username = Username;
-				v.displayName = DisplayName;
+				v.username, v.displayName = GetUserInfosFromId(v.key);
 			end;
 			return data;
 		end;
@@ -179,6 +179,7 @@ function Leaderboard:GetTopData(amount)
 		local success, data = pcall(PromiseRetrieveTopData);
 
 		if (success) then
+			dPrint(`Successfully retrieved top data for ${self.ServiceKey}`);
 			resolve(data);
 		else
 			warn(success, data);
@@ -194,6 +195,7 @@ function Leaderboard:UpdateData(userId, value) : ()
 
 	if (self.StoreType == "MemoryStore") then
 		self.Store:UpdateData(userId, value);
+		dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
 		return;
 	end;
 
@@ -203,6 +205,8 @@ function Leaderboard:UpdateData(userId, value) : ()
 	if (not Success) then
 		warn(`Leaderboard had trouble saving: {Error}`);
 	end;
+
+	dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
 end
 
 function Leaderboard:Destroy()

@@ -4,7 +4,15 @@ local MemoryStoreService = game:GetService("MemoryStoreService");
 local Compression = require(script.Parent.Compression);
 local HashLib = require(script.Parent.HashLib);
 
-export type LeaderboardType = "Daily" | "Weekly" | "Monthly" | "AllTime";
+local FALLBACK_EXPIRY_TIMES = {
+	["Hourly"] = 3600,
+	["Daily"] = 24 * 3600,
+	["Weekly"] = 7 * 24 * 3600,
+	["Monthly"] = 30 * 24 * 3600, -- Could be 31, but we'll use 30 for now
+}
+local DEBUG = true;
+
+export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime";
 export type LeaderboardArguments = {
 	Type: LeaderboardType,
 	FallbackExpiry: number,
@@ -23,18 +31,18 @@ type Object = {
 	UpdateData: (self: Shards, userId: number, value: number) -> (),
 	GetTopData: (self: Shards, amount: number, sortDirection: Enum.SortDirection) -> {TopData},
 	GetShardKey: (self: Shards, userId: number) -> (number),
-	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number) -> Shards,
+	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> Shards,
 }
 export type Shards = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 
 local Shards: Object = {} :: Object;
 Shards.__index = Shards;
 
-local FALLBACK_EXPIRY_TIMES = {
-	["Daily"] = 86400,
-	["Weekly"] = 604800,
-	["Monthly"] = 2.628e+6,
-}
+local function dPrint(...)
+	if (DEBUG) then
+		warn(`[Shards]`, ...);
+	end;
+end
 
 local function FoundInTable(tbl: {any}, value: any)
 	local function search(t, val)
@@ -67,15 +75,22 @@ local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	local DaysInCurrentMonth = GetDaysInMonth(DateTable.month, DateTable.year);
 
 	-- Define
-	local TotalSecondsInADay = 24 * 3600;
-	local TotalSecondsInAWeek = 7 * 24 * 3600;
+	local TotalSecondsInAnHour = FALLBACK_EXPIRY_TIMES["Hourly"];
+	local TotalSecondsInADay = FALLBACK_EXPIRY_TIMES["Daily"];
+	local TotalSecondsInAWeek = FALLBACK_EXPIRY_TIMES["Weekly"];
 	local TotalSecondsInMonth = DaysInCurrentMonth * 86400;
 
-	-- Seconds passed for Daily, Weekly, Monthly
+	-- Seconds passed for Hourly, Daily, Weekly, Monthly
 	local DayOfWeek = DateTable.wday;
+	local SecondsPassedThisHour = DateTable.min * 60 + DateTable.sec;
 	local SecondsPassedToday = (DateTable.hour * 3600) + (DateTable.min * 60) + DateTable.sec;
 	local SecondsPassedThisWeek = (DayOfWeek - 1) * 86400 + SecondsPassedToday;
 	local SecondsPassedThisMonth = (DateTable.day - 1) * 86400 + SecondsPassedToday;
+
+	if (leaderboardType == "Hourly") then
+		local SecondsLeft = (TotalSecondsInAnHour - SecondsPassedThisHour);
+		return SecondsLeft;
+	end;
 
 	if (leaderboardType == "Daily") then
 		local SecondsLeft = (TotalSecondsInADay - SecondsPassedToday);
@@ -103,6 +118,7 @@ function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardC
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
 		self.Shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
+		dPrint("Created MemoryStoreSortedMap for shard", i);
 	end;
 
 	self.ShardCount = shardCount
@@ -112,7 +128,6 @@ function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardC
 	return self;
 end
 
--- Define a method to determine the shard key based on the user ID
 function Shards:GetShardKey(userId)
 	-- Get the SHA-256 hash of the userId
 	local ShaHash = HashLib.sha1(tostring(userId));
