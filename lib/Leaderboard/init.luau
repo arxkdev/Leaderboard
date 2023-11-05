@@ -21,6 +21,7 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 	["Weekly"] = 10,
 	["Monthly"] = 15,
 }
+local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local DEBUG = false;
 
 -- We support Daily, Weekly, Monthly and AllTime currently
@@ -78,6 +79,10 @@ local function SmartAssert(condition: boolean, message: string)
 	end;
 end
 
+local function ShardCalculation(rollingExpiry: number): number
+	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
+end
+
 function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunctionType)
 	Leaderboard.UpsertFunction = func;
 	Leaderboard.UpdateInterval = interval;
@@ -101,14 +106,8 @@ end
 -- Helpers
 local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
 	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
-		local shardCount: number;
-		if leaderboardType == "Rolling" then
-			-- calculate appropriate shard count based on expiry time
-			shardCount = math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5)
-		else
-			shardCount = SHARD_COUNTS[leaderboardType];
-		end
-		return "MemoryStore", Shards.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
+		local ShardCount = leaderboardType == "Rolling" and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
+		return "MemoryStore", Shards.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
 	elseif (leaderboardType == "Yearly") then
 		local DateTable = os.date("*t", os.time());
 		local CurrentYear = DateTable.year;
@@ -150,8 +149,8 @@ end
 
 function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?, rollingExpiry: number?)
 	if (leaderboardType == "Rolling" and rollingExpiry ~= nil) then
-		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= 3888000, "rolling expiry must be within 60 and 3888000 seconds")
-	end
+		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY, `Rolling expiry must be within 60 and {MEMORY_STORE_SERVICE_MAX_EXPIRY} seconds`);
+	end;
 
 	local self = setmetatable({} :: LeaderboardArguments, Leaderboard);
 

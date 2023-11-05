@@ -80,8 +80,8 @@ end
 local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	if (leaderboardType == "Rolling") then
 		-- rolling expiry is dynamic so we can't return a fixed value
-		return nil
-	end
+		return nil;
+	end;
 
 	local DateTimeNow = DateTime.now();
 	local DateTable = DateTimeNow:ToUniversalTime();
@@ -130,20 +130,12 @@ function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardC
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
 		self.Shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
-		dPrint("Created MemoryStoreSortedMap for shard", i);
+		dPrint(`Cerated MemoryStoreSortedMap for _Shared{tostring(i)}`);
 	end;
 
-	self.ShardCount = shardCount
+	self.ShardCount = shardCount;
 	self.Type = leaderboardType;
-
-	if (leaderboardType == "Rolling" and rollingExpiry ~= nil) then
-		self.FallbackExpiry = rollingExpiry
-	elseif (leaderboardType == "Monthly") then
-		self.FallbackExpiry = GetDaysInMonth(os.date("*t", os.time()).month, os.date("*t", os.time()).year) * 24 * 3600
-	else
-		self.FallbackExpiry = FALLBACK_EXPIRY_TIMES[self.Type];
-	end
-
+	self.FallbackExpiry = (leaderboardType == "Rolling" and rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth(os.date("*t").month, os.date("*t").year) * 86400 or FALLBACK_EXPIRY_TIMES[self.Type];
 	return self;
 end
 
@@ -168,51 +160,59 @@ function Shards:UpdateData(userId, transformer)
 	-- Get the shard key, shard, leaderboard type, and user key
 	local ShardKey = self:GetShardKey(userId);
 	local Shard = self.Shards[ShardKey] or self.Shards[1];
-	local LeaderboardType = self.Type
-	local Key = tostring(userId)
+	local LeaderboardType = self.Type;
+	local Key = tostring(userId);
 
-	local Success, NewData = pcall(function()
-		if (LeaderboardType == "Rolling") then
-			local oldValue = Shard:GetAsync(Key)
-			local firstTime = oldValue == nil
-			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value)
+	-- Rolling support
+	if (LeaderboardType == "Rolling") then
+		local Success, NewData = pcall(function()
+			local oldValue = Shard:GetAsync(Key);
+			local firstTime = oldValue == nil;
+			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value);
 
-			local transformedValue = (typeof(transformer) == "function" and transformer(oldValue) or transformer)
-			local compressedValue = Compression.Compress(transformedValue)
-			local newSortKey = transformedValue
+			local transformedValue = (typeof(transformer) == "function" and transformer(oldValue) or transformer);
+			local compressedValue = Compression.Compress(transformedValue);
+			local newSortKey = transformedValue;
 
 			local newValue = {
 				value = compressedValue, -- this will be the value we save, we need to save as table to carry over creation data
 				__created = if (typeof(oldValue) ~= "table") then os.time() else oldValue.__created,
 				__expiry = self.FallbackExpiry
-			}
+			};
 			-- update the value with appropriate expiry time left
-			Shard:SetAsync(Key, newValue, newValue.__expiry - (os.time() - newValue.__created), newSortKey)
-			-- share same format as UpdateAsync
-			return compressedValue, newSortKey
-		else
-			return Shard:UpdateAsync(
-				Key,
-				function(oldValue)
-					oldValue = oldValue or 0;
-					local transformedValue = (typeof(transformer) == "function") and transformer(oldValue) or transformer;
-					local compressedValue = Compression.Compress(transformedValue);
-					local newSortKey = transformedValue;
-					if (compressedValue and newSortKey) then
-						return compressedValue, newSortKey;
-					end;
-					return nil;
-				end,
-				GetExpiry(LeaderboardType) or self.FallbackExpiry
-			);
-		end
+			Shard:SetAsync(Key, newValue, newValue.__expiry - (os.time() - newValue.__created), newSortKey);
+			return compressedValue, newSortKey; -- share same format as UpdateAsync
+		end);
+
+		if (not Success) then
+			warn(NewData);
+			return false;
+		end;
+
+		return true;
+	end;
+
+	local Success, NewData = pcall(function()
+		return Shard:UpdateAsync(
+			Key,
+			function(oldValue)
+				oldValue = oldValue or 0;
+				local transformedValue = (typeof(transformer) == "function") and transformer(oldValue) or transformer;
+				local compressedValue = Compression.Compress(transformedValue);
+				local newSortKey = transformedValue;
+				if (compressedValue and newSortKey) then
+					return compressedValue, newSortKey;
+				end;
+				return nil;
+			end,
+			GetExpiry(LeaderboardType) or self.FallbackExpiry
+		);
 	end);
 
 	if (not Success) then
 		warn(NewData);
 		return false;
 	end;
-
 	return true;
 end
 
@@ -224,9 +224,9 @@ function Shards:GetTopData(topAmount, sortDirection)
 	local CombinedResults = {};
 
 	-- Go through the shards, extract the data, and combine it
-	for _, shard in self.Shards do
-		local success, result = pcall(function()
-			local data = shard:GetRangeAsync(
+	for _, Shard in self.Shards do
+		local Success, Result = pcall(function()
+			local data = Shard:GetRangeAsync(
 				sortDirection,
 				topAmount
 			);
@@ -239,25 +239,26 @@ function Shards:GetTopData(topAmount, sortDirection)
 			return data
 		end);
 
-		if (success and result) then
-			for _, entry in result do
-				local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
-				if (Found) then
-					local FoundValueHigherThanCurrent = (Found.Value > entry.value);
-					if (not FoundValueHigherThanCurrent) then
-						-- The found value already there, is LOWER than this new one, update it
-						CombinedResults[IndexFound].Value = entry.value;
-					end;
-				else
-					-- There is no found value, add it to the combined results
-					table.insert(CombinedResults, {
-						UserId = tonumber(entry.key),
-						Value = entry.value
-					});
+		if (not Success) then
+			warn(Result);
+			continue; -- Skip this shard, there was a problem with it
+		end;
+
+		for _, entry in Result do
+			local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
+			if (Found) then
+				local FoundValueHigherThanCurrent = (Found.Value > entry.value);
+				if (not FoundValueHigherThanCurrent) then
+					-- The found value already there, is LOWER than this new one, update it
+					CombinedResults[IndexFound].Value = entry.value;
 				end;
+			else
+				-- There is no found value, add it to the combined results
+				table.insert(CombinedResults, {
+					UserId = tonumber(entry.key),
+					Value = entry.value
+				});
 			end;
-		else
-			warn(result);
 		end;
 	end;
 
