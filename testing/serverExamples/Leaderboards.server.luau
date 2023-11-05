@@ -3,17 +3,17 @@ local Players = game:GetService("Players");
 
 local LeaderboardTemplate = ReplicatedStorage:WaitForChild("LeaderboardTemplate");
 local Lib = ReplicatedStorage:WaitForChild("lib");
-local LeaderboardModule = require(Lib.Leaderboard);
+local Leaderboard = require(Lib.Leaderboard);
 
 local Key = 1;
-local AllTimeLeaderboard = LeaderboardModule.new(`AllTime-{Key}`, "AllTime", true);
-local HourlyLeaderboard = LeaderboardModule.new(`Hourly-{Key}`, "Hourly", true);
-local DailyLeaderboard = LeaderboardModule.new(`Daily-{Key}`, "Daily", true);
-local WeeklyLeaderboard = LeaderboardModule.new(`Weekly-{Key}`, "Weekly", true);
-local MonthlyLeaderboard = LeaderboardModule.new(`Monthly-{Key}`, "Monthly", true);
+local AllTimeLeaderboard = Leaderboard.new(`AllTime-{Key}`, "AllTime", true);
+local HourlyLeaderboard = Leaderboard.new(`Hourly-{Key}`, "Hourly", true);
+local DailyLeaderboard = Leaderboard.new(`Daily-{Key}`, "Daily", true);
+local WeeklyLeaderboard = Leaderboard.new(`Weekly-{Key}`, "Weekly", true);
+local MonthlyLeaderboard = Leaderboard.new(`Monthly-{Key}`, "Monthly", true);
 
 -- Starts with an interval of 5, collec the top 100, and the upsert function as described below
-LeaderboardModule:Start(120, 100, function(leaderboard)
+Leaderboard:Start(120, 100, function(leaderboard)
 	-- In here you'd likely get all the current (TotalValues) in their data, and apply
 	for _, player in Players:GetPlayers() do
 		leaderboard:UpdateData(player.UserId, 10000);
@@ -22,7 +22,7 @@ LeaderboardModule:Start(120, 100, function(leaderboard)
 	leaderboard:UpdateData(101, 1010);
 end)
 
-local function UpdateBoard(data: {LeaderboardModule.TopData}, model: Model)
+local function UpdateBoard(data: {Leaderboard.TopData}, model: Model)
 	-- Remove current items
 	for _, v in model.BoardPart.UI.List:GetChildren() do
 		if (not v:IsA("GuiObject")) then continue end;
