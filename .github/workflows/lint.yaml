@@ -1,4 +1,4 @@
-name: Lint for Repli
+name: Lint for Leaderboard
 
 on:
   push:
