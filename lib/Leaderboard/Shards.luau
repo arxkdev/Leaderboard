@@ -157,29 +157,25 @@ function Shards:UpdateData(userId, value)
 	local ShardKey = self:GetShardKey(userId);
 	local Shard = self.Shards[ShardKey] or self.Shards[1];
 
-	local success, newData, _ = pcall(function()
+	local Success, NewData, _ = pcall(function()
 		return Shard:UpdateAsync(
 			tostring(userId),
 			function(oldValue, oldSortKey)
-				-- oldValue is the current score, oldSortKey is the sort key previously stored
 				oldValue = oldValue or 0;
 				oldSortKey = oldSortKey or 0;
 				local newValue = CompressedValue;
-
-				-- If newValue is valid, then update the sort key and value
-				if (newValue) then
-					local newSortKey = newValue; -- Assuming the value is the score for sorting
+				local newSortKey = value;
+				if (newValue and newSortKey) then
 					return newValue, newSortKey;
 				end;
-				-- If newValue is not valid, do not update
 				return nil
 			end,
 			GetExpiry(self.Type) or self.FallbackExpiry
 		);
 	end);
 
-	if (not success) then
-		warn(newData);
+	if (not Success) then
+		warn(NewData);
 		return false;
 	end;
 
