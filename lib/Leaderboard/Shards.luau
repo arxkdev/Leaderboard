@@ -78,8 +78,10 @@ local function GetDaysInMonth(month: number, year: number): number
 end
 
 local function GetExpiry(leaderboardType: LeaderboardType): number | nil
-	local DateTable = os.date("*t", os.time());
-	local DaysInCurrentMonth = GetDaysInMonth(DateTable.month, DateTable.year);
+	local DateTimeNow = DateTime.now();
+	local DateTable = DateTimeNow:ToUniversalTime();
+	local CurrentDayOfWeek = (math.floor(DateTimeNow.UnixTimestamp / 86400) + 4) % 7 + 1;
+	local DaysInCurrentMonth = GetDaysInMonth(DateTable.Month, DateTable.Year);
 
 	-- Define
 	local TotalSecondsInAnHour = FALLBACK_EXPIRY_TIMES["Hourly"];
@@ -88,11 +90,10 @@ local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	local TotalSecondsInMonth = DaysInCurrentMonth * 86400;
 
 	-- Seconds passed for Hourly, Daily, Weekly, Monthly
-	local DayOfWeek = DateTable.wday;
-	local SecondsPassedThisHour = DateTable.min * 60 + DateTable.sec;
-	local SecondsPassedToday = (DateTable.hour * 3600) + (DateTable.min * 60) + DateTable.sec;
-	local SecondsPassedThisWeek = (DayOfWeek - 1) * 86400 + SecondsPassedToday;
-	local SecondsPassedThisMonth = (DateTable.day - 1) * 86400 + SecondsPassedToday;
+	local SecondsPassedThisHour = DateTable.Minute * 60 + DateTable.Second;
+	local SecondsPassedToday = (DateTable.Hour * 3600) + (DateTable.Minute * 60) + DateTable.Second;
+	local SecondsPassedThisWeek = (CurrentDayOfWeek - 1) * 86400 + SecondsPassedToday;
+	local SecondsPassedThisMonth = (DateTable.Day - 1) * 86400 + SecondsPassedToday;
 
 	if (leaderboardType == "Hourly") then
 		local SecondsLeft = (TotalSecondsInAnHour - SecondsPassedThisHour);
