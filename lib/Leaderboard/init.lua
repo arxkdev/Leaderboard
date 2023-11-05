@@ -20,7 +20,7 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 	["Weekly"] = 10,
 	["Monthly"] = 15,
 }
-local DEBUG = true;
+local DEBUG = false;
 
 -- We support Daily, Weekly, Monthly and AllTime currently
 type Shard = Shards.Shards;
@@ -79,7 +79,7 @@ function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunc
 		while (true) do
 			if (Leaderboard.UpsertFunction) then
 				for _, v in pairs(Leaderboards) do
-					Leaderboard.UpsertFunction(v);
+					pcall(Leaderboard.UpsertFunction, v);
 					v:GetTopData(Leaderboard.TopAmount):andThen(function(data)
 						v.LeaderboardUpdated:Fire(data)
 					end);

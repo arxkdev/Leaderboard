@@ -10,7 +10,7 @@ local FALLBACK_EXPIRY_TIMES = {
 	["Weekly"] = 7 * 24 * 3600,
 	["Monthly"] = 30 * 24 * 3600, -- Could be 31, but we'll use 30 for now
 }
-local DEBUG = true;
+local DEBUG = false;
 
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime";
 export type LeaderboardArguments = {
