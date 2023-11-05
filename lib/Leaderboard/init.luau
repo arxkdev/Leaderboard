@@ -171,10 +171,11 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	return self;
 end
 
---[[
+--[=[
 	Gets the top amount of data from the leaderboard
 	@param amount number The amount of data to get (max 100)
---]]
+	@return Promise
+]=]
 function Leaderboard:GetTopData(amount)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
@@ -214,11 +215,11 @@ function Leaderboard:GetTopData(amount)
 	end);
 end
 
---[[
+--[=[
 	Updates the data for a specific user
 	@param userId number The userId to update
 	@param transformer number | (number) -> (number) The transformer to use
---]]
+]=]
 function Leaderboard:UpdateData(userId, transformer)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(transformer) == "function" or type(transformer) == "number", "Transformer must be a function or a number");
@@ -249,9 +250,9 @@ function Leaderboard:UpdateData(userId, transformer)
 	dPrint(`Successfully updated data for {userId} in {self.ServiceKey}`);
 end
 
---[[
+--[=[
 	Destroys the leaderboard
---]]
+]=]
 function Leaderboard:Destroy()
 	if (Leaderboards[self.ServiceKey]) then
 		Leaderboards[self.ServiceKey] = nil;
