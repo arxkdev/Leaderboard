@@ -4,6 +4,7 @@
 
 -- DataStoreService to handle longer than 42 days (all time most likely)
 local DataStoreService = game:GetService("DataStoreService");
+local RunService = game:GetService("RunService");
 local UserService = game:GetService("UserService");
 local Players = game:GetService("Players");
 
@@ -30,9 +31,10 @@ export type LeaderboardArguments = {
 	Type: LeaderboardType,
 	StoreUsing: string,
 	Store: MemoryStoreSortedMap | OrderedDataStore | Shard,
-	LeaderboardUpdated: Signal.Signal<...any>,
+	LeaderboardUpdated: Signal.Signal<{TopData}>,
 }
 export type TopData = {
+	rank: number,
 	key: number,
 	value: number,
 	username: string,
@@ -142,6 +144,19 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	self.Type = leaderboardType;
 	self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
 	self.LeaderboardUpdated = Signal.new();
+
+	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
+	if (leaderboardType == "Yearly") then
+		local InitialDate = os.date("*t", os.time());
+		RunService.Heartbeat:Connect(function()
+			local Date = os.date("*t", os.time());
+			local isNewYear = Date.year ~= InitialDate.year;
+			if (isNewYear) then
+				InitialDate = Date;
+				self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
+			end;
+		end);
+	end;
 
 	if (handleUpsertAndRetrieval) then
 		dPrint(`Leaderboard ${serviceKey} is being handled automatically.`);

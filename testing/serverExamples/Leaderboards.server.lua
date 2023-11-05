@@ -22,20 +22,19 @@ LeaderboardModule:Start(120, 100, function(leaderboard)
 	leaderboard:UpdateData(101, 1010);
 end)
 
-local function UpdateBoard(data: {any}, model: Model)
+local function UpdateBoard(data: {LeaderboardModule.TopData}, model: Model)
 	-- Remove current items
 	for _, v in pairs(model.BoardPart.UI.List:GetChildren()) do
-		if (v:IsA("GuiObject")) then
-			v:Destroy();
-		end;
+		if (not v:IsA("GuiObject")) then continue end;
+		v:Destroy();
 	end;
 
 	-- Add new items
 	for i, v in pairs(data) do
 		local item = LeaderboardTemplate:Clone();
-		item.Name = i;
-		item.Rank.Text = i;
-		item.Username.Text = v.username;
+		item.Name = `Item-${i}`;
+		item.Rank.Text = v.rank;
+		item.Username.Text = `@{v.displayName}`;
 		item["Value"].Text = v.value;
 		item.Parent = model.BoardPart.UI.List;
 	end;

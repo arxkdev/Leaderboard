@@ -20,6 +20,7 @@ export type LeaderboardArguments = {
 	ShardCount: number,
 }
 export type TopData = {
+	rank: number,
 	key: number,
 	value: number,
 	username: string,
