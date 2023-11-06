@@ -88,7 +88,8 @@ local function SmartAssert(condition: boolean, message: string)
 	end;
 end
 
-local function ShardCalculation(rollingExpiry: number): number
+local function RollingShardCalculation(rollingExpiry: number): number
+	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
 	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
 end
 
@@ -115,7 +116,7 @@ end
 -- Helpers
 local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
 	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
-		local shardCount = leaderboardType == "Rolling" and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
+		local shardCount = leaderboardType == "Rolling" and RollingShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
 		return "MemoryStore", Shards.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
 	elseif (leaderboardType == "Yearly") then
 		local currentYear = DateTime.now():ToUniversalTime().Year;
