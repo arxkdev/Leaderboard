@@ -31,7 +31,7 @@ export type TopData = {
 type Object = {
 	__index: Object,
 	UpdateData: (self: Shards, userId: number, transformer: number | (number) -> (number)) -> (),
-	GetTopData: (self: Shards, amount: number, sortDirection: Enum.SortDirection) -> {TopData},
+	GetTopData: (self: Shards, amount: number, sortDirection: string) -> {TopData},
 	GetShardKey: (self: Shards, userId: number) -> (number),
 	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> Shards,
 	Destroy: (self: Shards) -> (),
@@ -224,14 +224,14 @@ function Shards:GetTopData(topAmount, sortDirection)
 	SmartAssert(topAmount, "topAmount must be provided");
 	SmartAssert(sortDirection, "sortDirection must be provided");
 	SmartAssert(typeof(topAmount) == "number", "topAmount must be a number");
-	SmartAssert(typeof(sortDirection) == "EnumItem", "sortDirection must be an Enum.SortDirection");
+	SmartAssert(typeof(sortDirection) == "string", "sortDirection must be a string");
 	local CombinedResults = {};
 
 	-- Go through the shards, extract the data, and combine it
 	for _, Shard in self.Shards do
 		local Success, Result = pcall(function()
 			local data = Shard:GetRangeAsync(
-				sortDirection,
+				Enum.SortDirection[sortDirection],
 				topAmount
 			);
 			if (self.Type == "Rolling") then

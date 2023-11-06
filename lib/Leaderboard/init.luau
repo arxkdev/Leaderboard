@@ -52,7 +52,7 @@ type Object = {
 	UpsertFunction: ((Leaderboard) -> ())?,
 	Start: (self: Object, topAmount: number, interval: number, func: (Leaderboard) -> ()) -> (),
 	UpdateData: (self: Leaderboard, userId: number, transformer: number | (number) -> (number)) -> (),
-	GetTopData: (self: Leaderboard, amount: number, sortDirection: Enum.SortDirection) -> Promise.TypedPromise<{TopData}>,
+	GetTopData: (self: Leaderboard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?) -> Leaderboard,
 }
@@ -218,8 +218,8 @@ function Leaderboard:GetTopData(amount, sortDirection)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
 	SmartAssert(amount > 0, "Amount must be greater than 0");
-	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "EnumItem", "SortDirection must be an Enum.SortDirection");
-	sortDirection = sortDirection or Enum.SortDirection.Descending;
+	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
+	sortDirection = sortDirection or "Descending";
 
 	local function PromiseRetrieveTopData()
 		if (self.StoreType == "MemoryStore") then
@@ -228,7 +228,7 @@ function Leaderboard:GetTopData(amount, sortDirection)
 				return Transform(rank, v.key, v.value);
 			end);
 		else
-			local Result = self.Store:GetSortedAsync(sortDirection == Enum.SortDirection.Descending and false or true, amount);
+			local Result = self.Store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
 			local Data = Result:GetCurrentPage() :: {any};
 			return Map(Data, function(v, rank)
 				return Transform(rank, v.key, v.value);
