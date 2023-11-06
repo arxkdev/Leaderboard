@@ -24,7 +24,7 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local DEBUG = false;
 
--- We support Daily, Weekly, Monthly and AllTime currently
+-- Supports Daily, Weekly, Monthly and AllTime currently
 type Shard = Shards.Shards;
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
 export type LeaderboardArguments = {
@@ -114,12 +114,12 @@ end
 -- Helpers
 local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
 	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
-		local ShardCount = leaderboardType == "Rolling" and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
-		return "MemoryStore", Shards.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
+		local shardCount = leaderboardType == "Rolling" and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
+		return "MemoryStore", Shards.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
 	elseif (leaderboardType == "Yearly") then
-		local DateTable = os.date("*t", os.time());
-		local CurrentYear = DateTable.year;
-		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{CurrentYear}:{serviceKey}`);
+		local dateTable = os.date("*t", os.time());
+		local currentYear = dateTable.year;
+		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{currentYear}:{serviceKey}`);
 	end;
 
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
