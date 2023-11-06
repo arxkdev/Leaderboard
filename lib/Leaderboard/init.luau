@@ -60,14 +60,14 @@ type UpsertFunctionType = (Leaderboard) -> ();
 export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 
 -- Start
-local Leaderboards = {}; -- To handle automatic upserting and retrieval of leaderboards
+local Leaderboards = {} :: {[string]: Leaderboard}; -- To handle automatic upserting and retrieval
 local UserIdsCache = {}; -- To assign userids {username, displayName}
 
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 Leaderboard.UpsertFunction = nil;
 Leaderboard.UpdateInterval = DEFAULT_UPDATE_INTERVAL;
-Leaderboard.TopAmount = DEFAULT_UPDATE_INTERVAL;
+Leaderboard.TopAmount = DEFAULT_TOP_AMOUNT;
 
 local function dPrint(...)
 	if (DEBUG) then
@@ -103,9 +103,9 @@ function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunc
 		while (true) do
 			if (Leaderboard.UpsertFunction) then
 				for _, v in Leaderboards do
-					pcall(Leaderboard.UpsertFunction, v);
+					task.spawn(pcall, Leaderboard.UpsertFunction, v); -- This can be ran on a separate thread as it is not critical before the next update
 					v:GetTopData(Leaderboard.TopAmount):andThen(function(data)
-						v.LeaderboardUpdated:Fire(data)
+						v.LeaderboardUpdated:Fire(data);
 					end);
 				end;
 			end;
@@ -180,7 +180,8 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	self.Type = leaderboardType;
 	self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
 	self.LeaderboardUpdated = Signal.new();
-	self._threads = {}
+	self._threads = {};
+
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
 	-- Ty Proxus for writing this
 	if (leaderboardType == "Yearly") then

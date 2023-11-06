@@ -34,6 +34,7 @@ type Object = {
 	GetTopData: (self: Shards, amount: number, sortDirection: Enum.SortDirection) -> {TopData},
 	GetShardKey: (self: Shards, userId: number) -> (number),
 	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> Shards,
+	Destroy: (self: Shards) -> (),
 }
 export type Shards = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 
@@ -276,6 +277,10 @@ function Shards:GetTopData(topAmount, sortDirection)
 	end;
 
 	return CombinedResults;
+end
+
+function Shards:Destroy()
+
 end
 
 return table.freeze({
