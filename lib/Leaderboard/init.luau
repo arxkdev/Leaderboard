@@ -34,6 +34,7 @@ export type LeaderboardArguments = {
 	StoreUsing: string,
 	Store: MemoryStoreSortedMap | OrderedDataStore | Shard,
 	LeaderboardUpdated: Signal.Signal<{TopData}>,
+	_threads: {thread},
 }
 export type TopData = {
 	Rank: number,
@@ -178,7 +179,7 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	self.Type = leaderboardType;
 	self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
 	self.LeaderboardUpdated = Signal.new();
-
+	self._threads = {}
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
 	-- Ty Proxus for writing this
 	if (leaderboardType == "Yearly") then
