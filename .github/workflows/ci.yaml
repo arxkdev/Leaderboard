@@ -1,4 +1,4 @@
-name: Lint for Leaderboard
+name: CI
 
 on:
   push:
@@ -34,3 +34,15 @@ jobs:
       # Run selene through the testing folder
       - name: Testing checking with Selene
         run: selene testing
+
+  Style:
+    name: Styling
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: JohnnyMorganz/stylua-action@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        version: latest # NOTE: we recommend pinning to a specific version in case of formatting changes
+        # CLI arguments
+        args: --check .
