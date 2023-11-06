@@ -22,6 +22,8 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 }
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local DEBUG = false;
+local DEFAULT_TOP_AMOUNT = 100;
+local DEFAULT_UPDATE_INTERVAL = 120;
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
 type Shard = Shards.Shards;
@@ -63,8 +65,8 @@ local UserIdsCache = {}; -- To assign userids {username, displayName}
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 Leaderboard.UpsertFunction = nil;
-Leaderboard.UpdateInterval = 120; -- Default to 2 minutes
-Leaderboard.TopAmount = 100; -- Default to 100
+Leaderboard.UpdateInterval = DEFAULT_UPDATE_INTERVAL;
+Leaderboard.TopAmount = DEFAULT_UPDATE_INTERVAL;
 
 local function dPrint(...)
 	if (DEBUG) then
