@@ -70,33 +70,3 @@ MonthlyLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
 	print("Monthly", leaderboardTop);
 	UpdateBoard(leaderboardTop, workspace.Leaderboards.Monthly);
 end)
-
---local function UpdateLeaderboards()
---	-- Set the stats
---	for _, player in Players:GetPlayers() do
---		DailyLeaderboard:UpdateData(player.UserId, 10);
---		AllTimeLeaderboard:UpdateData(player.UserId, 10);
---	end;
---	DailyLeaderboard:UpdateData(100, 100);
---	AllTimeLeaderboard:UpdateData(100, 100);
-
---	-- Retrieve the top list
---	DailyLeaderboard:GetTopData(100):andThen(function(topList)
---		print("DailyTopList", topList);
---	end);
-
---	-- Retrieve the top list all time
---	AllTimeLeaderboard:GetTopData(100):andThen(function(allTimeTopList)
---		print("AllTimeTopList", allTimeTopList);
---	end);
---end
-
---task.wait(5)
---print("Starting leadeboards")
-
---task.spawn(function()
---	while (true) do
---		UpdateLeaderboards();
---		task.wait(120);
---	end;
---end)
