@@ -49,7 +49,7 @@ type Object = {
 	UpsertFunction: ((Leaderboard) -> ())?,
 	Start: (self: Object, topAmount: number, interval: number, func: (Leaderboard) -> ()) -> (),
 	UpdateData: (self: Leaderboard, userId: number, transformer: number | (number) -> (number)) -> (),
-	GetTopData: (self: Leaderboard, amount: number) -> Promise.TypedPromise<{TopData}>,
+	GetTopData: (self: Leaderboard, amount: number, sortDirection: Enum.SortDirection) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?) -> Leaderboard,
 }
@@ -73,7 +73,7 @@ local function dPrint(...)
 	end;
 end
 
-local function Map(tbl: {any}, fn: (any, number) -> (any)): {any}
+local function Map<T>(tbl: {T}, fn: (T, number) -> (any)): {any}
     local t = {};
     for i, v in ipairs(tbl) do
         t[i] = fn(v, i);
@@ -125,7 +125,7 @@ local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardTy
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
 end
 
-local function GetUserInfosFromId(userId: number): string
+local function GetUserInfosFromId(userId: number): (string, string)
 	userId = tonumber(userId);
 
 	-- First, check if the cache contains the name
@@ -198,34 +198,37 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	return self;
 end
 
-function Leaderboard:GetTopData(amount)
+function Leaderboard:GetTopData(amount, sortDirection)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
+	SmartAssert(amount > 0, "Amount must be greater than 0");
+	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "EnumItem", "SortDirection must be an Enum.SortDirection");
+	sortDirection = sortDirection or Enum.SortDirection.Descending;
 
 	local function PromiseRetrieveTopData()
 		if (self.StoreType == "MemoryStore") then
-			local data = self.Store:GetTopData(amount, Enum.SortDirection.Descending);
-			return Map(data, function(v, i)
-				return Transform(i, v.key, v.value);
+			local Data = self.Store:GetTopData(amount, sortDirection);
+			return Map(Data, function(v, rank)
+				return Transform(rank, v.key, v.value);
 			end);
 		else
-			local result = self.Store:GetSortedAsync(false, amount);
-			local data = result:GetCurrentPage() :: {any};
-			return Map(data, function(v, i)
-				return Transform(i, v.key, v.value);
+			local Result = self.Store:GetSortedAsync(sortDirection == Enum.SortDirection.Descending and false or true, amount);
+			local Data = Result:GetCurrentPage() :: {any};
+			return Map(Data, function(v, rank)
+				return Transform(rank, v.key, v.value);
 			end);
 		end;
 	end;
 
 	return Promise.new(function(resolve, reject)
-		local success, data = pcall(PromiseRetrieveTopData);
+		local Success, Data = pcall(PromiseRetrieveTopData);
 
-		if (success) then
-			dPrint(`Successfully retrieved top data for ${self.ServiceKey}`);
-			resolve(data);
+		if (Success) then
+			dPrint(`Successfully retrieved top data for {self.ServiceKey}`);
+			resolve(Data);
 		else
-			warn(success, data);
-			reject(data);
+			warn(Success, Data);
+			reject(Data);
 		end;
 	end);
 end
