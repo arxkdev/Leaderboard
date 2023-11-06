@@ -37,6 +37,7 @@ local function UpdateBoard(data: TopData, model: Model)
 		item.Name = `Item-${i}`;
 		item.Rank.Text = v.Rank;
 		item.Username.Text = `@{v.DisplayName}`;
+		item.LayoutOrder = i
 		item["Value"].Text = v.Value;
 		item.Parent = model.BoardPart.UI.List;
 	end;
