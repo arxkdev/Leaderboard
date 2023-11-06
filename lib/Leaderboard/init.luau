@@ -46,6 +46,7 @@ export type TopData = {
 
 type Object = {
 	__index: Object,
+	_threads: {thread},
 	UpdateInterval: number,
 	TopAmount: number,
 	UpsertFunction: ((Leaderboard) -> ())?,
@@ -68,6 +69,7 @@ Leaderboard.__index = Leaderboard;
 Leaderboard.UpsertFunction = nil;
 Leaderboard.UpdateInterval = DEFAULT_UPDATE_INTERVAL;
 Leaderboard.TopAmount = DEFAULT_TOP_AMOUNT;
+Leaderboard._threads = {};
 
 local function dPrint(...)
 	if (DEBUG) then
@@ -112,7 +114,7 @@ function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunc
 			task.wait(Leaderboard.UpdateInterval);
 		end;
 	end);
-	table.insert(self._threads, thread);
+	table.insert(Leaderboard._threads, thread);
 end
 
 -- Helpers
@@ -202,7 +204,7 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 				task.wait(if isLastMinute then nil else 30);
 			end;
 		end);
-		table.insert(self._threads, thread)
+		table.insert(self._threads, thread);
 	end;
 
 	if (handleUpsertAndRetrieval) then
@@ -278,11 +280,12 @@ function Leaderboard:UpdateData(userId, transformer)
 end
 
 function Leaderboard:Destroy()
-	for _, thread in self._threads do
-		if (typeof(thread) == "thread") then
-			task.cancel(thread);
+	for _, thread in {self._threads, Leaderboard._threads} do
+		for _, v in ipairs(thread) do
+			task.cancel(v);
 		end;
 	end;
+
 	if (Leaderboards[self.ServiceKey]) then
 		Leaderboards[self.ServiceKey] = nil;
 	end;

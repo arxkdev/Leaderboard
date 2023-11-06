@@ -69,13 +69,15 @@ local function FoundInTable(tbl: {any}, value: any): (boolean | number, any)
 	return search(tbl, value)
 end
 
-local function GetDaysInMonth(month: number, year: number): number
-	if (month == 2) then -- This is for a leap year
-		if (year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0)) then
+local function GetDaysInMonth(): number
+	local CurrentDate = DateTime.now():ToUniversalTime();
+	local Month, Year = CurrentDate.Month, CurrentDate.Year;
+	if (Month == 2) then -- This is for a leap year
+		if (Year % 4 == 0 and (Year % 100 ~= 0 or Year % 400 == 0)) then
 			return 29; -- Leap year month (29 days)
 		end;
 	end;
-	return DAYS_IN_MONTH[month];
+	return DAYS_IN_MONTH[Month];
 end
 
 local function GetExpiry(leaderboardType: LeaderboardType): number | nil
@@ -87,7 +89,7 @@ local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	local DateTimeNow = DateTime.now();
 	local DateTable = DateTimeNow:ToUniversalTime();
 	local CurrentDayOfWeek = (math.floor(DateTimeNow.UnixTimestamp / 86400) + 4) % 7 + 1;
-	local DaysInCurrentMonth = GetDaysInMonth(DateTable.Month, DateTable.Year);
+	local DaysInCurrentMonth = GetDaysInMonth();
 
 	-- Define
 	local TotalSecondsInAnHour = FALLBACK_EXPIRY_TIMES["Hourly"];
@@ -136,7 +138,7 @@ function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardC
 
 	self.ShardCount = shardCount;
 	self.Type = leaderboardType;
-	self.FallbackExpiry = (leaderboardType == "Rolling" and rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth(DateTime.now():ToUniversalTime().Month, DateTime.now():ToUniversalTime().Year) * 86400 or FALLBACK_EXPIRY_TIMES[self.Type];
+	self.FallbackExpiry = (leaderboardType == "Rolling" and rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self.Type];
 	return self;
 end
 
