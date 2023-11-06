@@ -4,7 +4,6 @@
 
 -- DataStoreService to handle longer than 42 days (all time most likely)
 local DataStoreService = game:GetService("DataStoreService");
-local RunService = game:GetService("RunService");
 local UserService = game:GetService("UserService");
 local Players = game:GetService("Players");
 
@@ -23,6 +22,8 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 }
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local DEBUG = false;
+local DEFAULT_TOP_AMOUNT = 100;
+local DEFAULT_UPDATE_INTERVAL = 120;
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
 type Shard = Shards.Shards;
@@ -64,8 +65,8 @@ local UserIdsCache = {}; -- To assign userids {username, displayName}
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 Leaderboard.UpsertFunction = nil;
-Leaderboard.UpdateInterval = 120; -- Default to 2 minutes
-Leaderboard.TopAmount = 100; -- Default to 100
+Leaderboard.UpdateInterval = DEFAULT_UPDATE_INTERVAL;
+Leaderboard.TopAmount = DEFAULT_UPDATE_INTERVAL;
 
 local function dPrint(...)
 	if (DEBUG) then
@@ -87,7 +88,8 @@ local function SmartAssert(condition: boolean, message: string)
 	end;
 end
 
-local function ShardCalculation(rollingExpiry: number): number
+local function RollingShardCalculation(rollingExpiry: number): number
+	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
 	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
 end
 
@@ -114,11 +116,10 @@ end
 -- Helpers
 local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
 	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
-		local shardCount = leaderboardType == "Rolling" and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
+		local shardCount = leaderboardType == "Rolling" and RollingShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
 		return "MemoryStore", Shards.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
 	elseif (leaderboardType == "Yearly") then
-		local dateTable = os.date("*t", os.time());
-		local currentYear = dateTable.year;
+		local currentYear = DateTime.now():ToUniversalTime().Year;
 		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{currentYear}:{serviceKey}`);
 	end;
 
@@ -179,24 +180,25 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	self.LeaderboardUpdated = Signal.new();
 
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
+	-- Ty Proxus for writing this
 	if (leaderboardType == "Yearly") then
 		local initialDate = os.date("*t", os.time());
-		local isLastMinute = false
-		
+		local isLastMinute = false;
+
 		task.spawn(function()
-			while true do
+			while (true) do
 				local currentDate = os.date("*t", os.time());
 				local isNewYear = currentDate.year ~= initialDate.year;
-				isLastMinute = isLastMinute or (currentDate.yday == 365 and currentDate.hour == 23 and currentDate.min == 59)
+				isLastMinute = isLastMinute or (currentDate.yday == 365 and currentDate.hour == 23 and currentDate.min == 59);
 
-				if isNewYear then
-					initialDate = currentDate
-					isLastMinute = false
+				if (isNewYear) then
+					initialDate = currentDate;
+					isLastMinute = false;
 					self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
-				end
-				task.wait(if isLastMinute then nil else 30)
-			end
-		end)
+				end;
+				task.wait(if isLastMinute then nil else 30);
+			end;
+		end);
 	end;
 
 	if (handleUpsertAndRetrieval) then
@@ -257,7 +259,7 @@ function Leaderboard:UpdateData(userId, transformer)
 		self.Store:UpdateAsync(userId, function(oldValue)
 			oldValue = oldValue or 0;
 			local transformedValue = (type(transformer) == "function") and transformer(oldValue) or transformer;
-			if type(transformedValue) == "number" then
+			if (type(transformedValue) == "number") then
 				local compressedValue = Compression.Compress(transformedValue);
 				return compressedValue;
 			end;

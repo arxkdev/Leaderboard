@@ -14,8 +14,10 @@ local DailyLeaderboard = Leaderboard.new(`Daily-{Key}`, "Daily", true);
 local WeeklyLeaderboard = Leaderboard.new(`Weekly-{Key}`, "Weekly", true);
 local MonthlyLeaderboard = Leaderboard.new(`Monthly-{Key}`, "Monthly", true);
 
--- Starts with an interval of 5, collec the top 100, and the upsert function as described below
-Leaderboard:Start(120, 100, function(leaderboard)
+-- Starts with an interval of 120, collect the top 100, and the upsert function as described below
+local INTERVAL = 120;
+local VALUES_TO_COLLECT = 100;
+Leaderboard:Start(INTERVAL, VALUES_TO_COLLECT, function(leaderboard)
 	-- In here you'd likely get all the current (TotalValues) in their data, and apply
 	for _, player in Players:GetPlayers() do
 		leaderboard:UpdateData(player.UserId, 10000);
@@ -39,6 +41,7 @@ local function UpdateBoard(data: TopData, model: Model)
 		item.Username.Text = `@{v.DisplayName}`;
 		item.LayoutOrder = i
 		item["Value"].Text = v.Value;
+		item.LayoutOrder = v.Rank;
 		item.Parent = model.BoardPart.UI.List;
 	end;
 end

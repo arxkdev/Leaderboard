@@ -135,7 +135,7 @@ function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardC
 
 	self.ShardCount = shardCount;
 	self.Type = leaderboardType;
-	self.FallbackExpiry = (leaderboardType == "Rolling" and rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth(os.date("*t").month, os.date("*t").year) * 86400 or FALLBACK_EXPIRY_TIMES[self.Type];
+	self.FallbackExpiry = (leaderboardType == "Rolling" and rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth(DateTime.now():ToUniversalTime().Month, DateTime.now():ToUniversalTime().Year) * 86400 or FALLBACK_EXPIRY_TIMES[self.Type];
 	return self;
 end
 
