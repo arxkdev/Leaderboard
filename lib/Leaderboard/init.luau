@@ -155,11 +155,11 @@ local function GetUserInfosFromId(userId: number): string
 	return Username, DisplayName;
 end
 
-local function Transform(rank: number, key: number, data: {any})
+local function Transform(rank: number, key: number, value: number): TopData
 	local Username, DisplayName = GetUserInfosFromId(key);
 	return {
 		Rank = rank,
-		Value = Compression.Decompress(data),
+		Value = Compression.Decompress(value),
 		UserId = key,
 		Username = Username,
 		DisplayName = DisplayName,
