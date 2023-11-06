@@ -4,7 +4,6 @@
 
 -- DataStoreService to handle longer than 42 days (all time most likely)
 local DataStoreService = game:GetService("DataStoreService");
-local RunService = game:GetService("RunService");
 local UserService = game:GetService("UserService");
 local Players = game:GetService("Players");
 
@@ -24,7 +23,7 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local DEBUG = false;
 
--- We support Daily, Weekly, Monthly and AllTime currently
+-- Supports Daily, Weekly, Monthly and AllTime currently
 type Shard = Shards.Shards;
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
 export type LeaderboardArguments = {
@@ -114,12 +113,11 @@ end
 -- Helpers
 local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
 	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
-		local ShardCount = leaderboardType == "Rolling" and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
-		return "MemoryStore", Shards.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
+		local shardCount = leaderboardType == "Rolling" and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
+		return "MemoryStore", Shards.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
 	elseif (leaderboardType == "Yearly") then
-		local DateTable = os.date("*t", os.time());
-		local CurrentYear = DateTable.year;
-		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{CurrentYear}:{serviceKey}`);
+		local currentYear = DateTime.now():ToUniversalTime().Year;
+		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{currentYear}:{serviceKey}`);
 	end;
 
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
@@ -179,14 +177,23 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 	self.LeaderboardUpdated = Signal.new();
 
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
+	-- Ty Proxus for writing this
 	if (leaderboardType == "Yearly") then
-		local InitialDate = os.date("*t", os.time());
-		RunService.Heartbeat:Connect(function()
-			local Date = os.date("*t", os.time());
-			local isNewYear = Date.year ~= InitialDate.year;
-			if (isNewYear) then
-				InitialDate = Date;
-				self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
+		local initialDate = os.date("*t", os.time());
+		local isLastMinute = false;
+
+		task.spawn(function()
+			while (true) do
+				local currentDate = os.date("*t", os.time());
+				local isNewYear = currentDate.year ~= initialDate.year;
+				isLastMinute = isLastMinute or (currentDate.yday == 365 and currentDate.hour == 23 and currentDate.min == 59);
+
+				if (isNewYear) then
+					initialDate = currentDate;
+					isLastMinute = false;
+					self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
+				end;
+				task.wait(if isLastMinute then nil else 30);
 			end;
 		end);
 	end;
@@ -249,8 +256,8 @@ function Leaderboard:UpdateData(userId, transformer)
 		self.Store:UpdateAsync(userId, function(oldValue)
 			oldValue = oldValue or 0;
 			local transformedValue = (type(transformer) == "function") and transformer(oldValue) or transformer;
-			local compressedValue = Compression.Compress(transformedValue);
-			if (compressedValue) then
+			if (type(transformedValue) == "number") then
+				local compressedValue = Compression.Compress(transformedValue);
 				return compressedValue;
 			end;
 			return nil;
