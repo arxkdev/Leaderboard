@@ -67,7 +67,7 @@ local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 Leaderboard.UpsertFunction = nil;
 Leaderboard.UpdateInterval = DEFAULT_UPDATE_INTERVAL;
-Leaderboard.TopAmount = DEFAULT_UPDATE_INTERVAL;
+Leaderboard.TopAmount = DEFAULT_TOP_AMOUNT;
 
 local function dPrint(...)
 	if (DEBUG) then
