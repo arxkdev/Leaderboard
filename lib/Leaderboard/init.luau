@@ -112,7 +112,7 @@ function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunc
 			task.wait(Leaderboard.UpdateInterval);
 		end;
 	end);
-	table.insert(self._threads, thread)
+	table.insert(self._threads, thread);
 end
 
 -- Helpers
@@ -280,9 +280,9 @@ end
 function Leaderboard:Destroy()
 	for _, thread in self._threads do
 		if (typeof(thread) == "thread") then
-			task.cancel(thread)
-		end
-	end
+			task.cancel(thread);
+		end;
+	end;
 	if (Leaderboards[self.ServiceKey]) then
 		Leaderboards[self.ServiceKey] = nil;
 	end;
