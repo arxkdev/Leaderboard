@@ -257,8 +257,8 @@ function Leaderboard:UpdateData(userId, transformer)
 		self.Store:UpdateAsync(userId, function(oldValue)
 			oldValue = oldValue or 0;
 			local transformedValue = (type(transformer) == "function") and transformer(oldValue) or transformer;
-			local compressedValue = Compression.Compress(transformedValue);
-			if (compressedValue) then
+			if type(transformedValue) == "number" then
+				local compressedValue = Compression.Compress(transformedValue);
 				return compressedValue;
 			end;
 			return nil;
