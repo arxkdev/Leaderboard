@@ -12,5 +12,3 @@ function Compression.Decompress(num: number): number
 end
 
 return table.freeze(Compression);
-
-

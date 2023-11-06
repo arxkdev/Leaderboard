@@ -1353,5 +1353,3 @@ block_size_for_HMAC = {
 }
 
 return sha
-
-
