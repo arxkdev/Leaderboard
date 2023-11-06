@@ -51,7 +51,7 @@ local function SmartAssert(condition: boolean, message: string)
 	end;
 end
 
-local function FoundInTable(tbl: {any}, value: any)
+local function FoundInTable(tbl: {any}, value: any): (boolean | number, any)
 	local function search(t: {any}, val: any)
 		for index, v in t do
 			if (v == val) then
@@ -62,7 +62,7 @@ local function FoundInTable(tbl: {any}, value: any)
 				end;
 			end;
 		end;
-		return false;
+		return false, nil;
 	end;
 	return search(tbl, value)
 end
@@ -141,6 +141,7 @@ end
 
 function Shards:GetShardKey(userId)
 	SmartAssert(userId, "userId must be provided");
+	SmartAssert(typeof(userId) == "number", "userId must be a number");
 
 	-- Get the SHA-256 hash of the userId
 	local ShaHash = HashLib.sha1(tostring(userId));
@@ -247,16 +248,16 @@ function Shards:GetTopData(topAmount, sortDirection)
 		for _, entry in Result do
 			local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
 			if (Found) then
-				local FoundValueHigherThanCurrent = (Found.Value > entry.value);
+				local FoundValueHigherThanCurrent = (Found.value > entry.value);
 				if (not FoundValueHigherThanCurrent) then
 					-- The found value already there, is LOWER than this new one, update it
-					CombinedResults[IndexFound].Value = entry.value;
+					CombinedResults[IndexFound].value = entry.value;
 				end;
 			else
 				-- There is no found value, add it to the combined results
 				table.insert(CombinedResults, {
-					UserId = tonumber(entry.key),
-					Value = entry.value
+					key = tonumber(entry.key),
+					value = entry.value
 				});
 			end;
 		end;
@@ -264,7 +265,7 @@ function Shards:GetTopData(topAmount, sortDirection)
 
 	-- Sort it
 	table.sort(CombinedResults, function(a, b)
-		return a.Value > b.Value;
+		return a.value > b.value;
 	end);
 
 	-- Take off excess
@@ -277,4 +278,6 @@ function Shards:GetTopData(topAmount, sortDirection)
 	return CombinedResults;
 end
 
-return Shards;
+return table.freeze({
+	new = Shards.new,
+});

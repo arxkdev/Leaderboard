@@ -11,4 +11,4 @@ function Compression.Decompress(num: number): number
 	return (math.floor(num ~= 0 and (math.pow(LOGARITHMIC_BASE, num)) or 0));
 end
 
-return Compression;
+return table.freeze(Compression);

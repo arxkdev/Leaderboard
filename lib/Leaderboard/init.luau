@@ -73,6 +73,14 @@ local function dPrint(...)
 	end;
 end
 
+local function Map(tbl: {any}, fn: (any, number) -> (any)): {any}
+    local t = {};
+    for i, v in ipairs(tbl) do
+        t[i] = fn(v, i);
+    end;
+    return t;
+end
+
 local function SmartAssert(condition: boolean, message: string)
 	if (not condition) then
 		error(message, 2);
@@ -147,6 +155,17 @@ local function GetUserInfosFromId(userId: number): string
 	return Username, DisplayName;
 end
 
+local function Transform(rank: number, key: number, data: {any})
+	local Username, DisplayName = GetUserInfosFromId(key);
+	return {
+		Rank = rank,
+		Value = Compression.Decompress(data),
+		UserId = key,
+		Username = Username,
+		DisplayName = DisplayName,
+	};
+end
+
 function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?, rollingExpiry: number?)
 	if (leaderboardType == "Rolling" and rollingExpiry ~= nil) then
 		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY, `Rolling expiry must be within 60 and {MEMORY_STORE_SERVICE_MAX_EXPIRY} seconds`);
@@ -186,22 +205,15 @@ function Leaderboard:GetTopData(amount)
 	local function PromiseRetrieveTopData()
 		if (self.StoreType == "MemoryStore") then
 			local data = self.Store:GetTopData(amount, Enum.SortDirection.Descending);
-			for rank, v in data do
-				v.Rank = rank;
-				v.Value = Compression.Decompress(v.Value);
-				v.Username, v.DisplayName = GetUserInfosFromId(v.UserId);
-			end;
-			return data;
+			return Map(data, function(v, i)
+				return Transform(i, v.key, v.value);
+			end);
 		else
 			local result = self.Store:GetSortedAsync(false, amount);
-			local data = result:GetCurrentPage() :: {any}
-			for rank, v in data do
-				v.UserId, v.Rank = v.key, rank;
-				v.Value = Compression.Decompress(v.value);
-				v.Username, v.DisplayName = GetUserInfosFromId(v.key);
-				v.key, v.value = nil, nil;
-			end;
-			return data;
+			local data = result:GetCurrentPage() :: {any};
+			return Map(data, function(v, i)
+				return Transform(i, v.key, v.value);
+			end);
 		end;
 	end;
 
@@ -254,4 +266,10 @@ function Leaderboard:Destroy()
 	end;
 end
 
-return Leaderboard;
+return table.freeze({
+	new = Leaderboard.new,
+	Start = Leaderboard.Start,
+	UpdateData = Leaderboard.UpdateData,
+	GetTopData = Leaderboard.GetTopData,
+	Destroy = Leaderboard.Destroy,
+})
