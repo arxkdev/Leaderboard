@@ -279,7 +279,7 @@ end
 
 function Leaderboard:Destroy()
 	for _, thread in self._threads do
-		if typeof("thread") then
+		if (typeof(thread) == "thread") then
 			task.cancel(thread)
 		end
 	end
