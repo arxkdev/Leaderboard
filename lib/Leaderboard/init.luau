@@ -99,7 +99,7 @@ function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunc
 	Leaderboard.UpdateInterval = interval;
 	Leaderboard.TopAmount = topAmount;
 
-	task.spawn(function()
+	local thread = task.spawn(function()
 		while (true) do
 			if (Leaderboard.UpsertFunction) then
 				for _, v in Leaderboards do
@@ -112,6 +112,7 @@ function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunc
 			task.wait(Leaderboard.UpdateInterval);
 		end;
 	end);
+	table.insert(self._threads, thread)
 end
 
 -- Helpers
@@ -186,7 +187,7 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 		local initialDate = os.date("*t", os.time());
 		local isLastMinute = false;
 
-		task.spawn(function()
+		local thread = task.spawn(function()
 			while (true) do
 				local currentDate = os.date("*t", os.time());
 				local isNewYear = currentDate.year ~= initialDate.year;
@@ -200,6 +201,7 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 				task.wait(if isLastMinute then nil else 30);
 			end;
 		end);
+		table.insert(self._threads, thread)
 	end;
 
 	if (handleUpsertAndRetrieval) then
@@ -275,6 +277,11 @@ function Leaderboard:UpdateData(userId, transformer)
 end
 
 function Leaderboard:Destroy()
+	for _, thread in self._threads do
+		if typeof("thread") then
+			task.cancel(thread)
+		end
+	end
 	if (Leaderboards[self.ServiceKey]) then
 		Leaderboards[self.ServiceKey] = nil;
 	end;

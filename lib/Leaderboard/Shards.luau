@@ -11,6 +11,7 @@ local FALLBACK_EXPIRY_TIMES = {
 	["Monthly"] = 30 * 24 * 3600, -- Could be 31, but we'll use 30 for now
 }
 local DEBUG = false;
+local DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime" | "Rolling";
 export type LeaderboardArguments = {
@@ -68,13 +69,12 @@ local function FoundInTable(tbl: {any}, value: any): (boolean | number, any)
 end
 
 local function GetDaysInMonth(month: number, year: number): number
-	local DaysInMonth = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 	if (month == 2) then -- This is for a leap year
 		if (year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0)) then
 			return 29; -- Leap year month (29 days)
 		end;
 	end;
-	return DaysInMonth[month];
+	return DAYS_IN_MONTH[month];
 end
 
 local function GetExpiry(leaderboardType: LeaderboardType): number | nil
