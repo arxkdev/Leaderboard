@@ -180,15 +180,23 @@ function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, h
 
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
 	if (leaderboardType == "Yearly") then
-		local InitialDate = os.date("*t", os.time());
-		RunService.Heartbeat:Connect(function()
-			local Date = os.date("*t", os.time());
-			local isNewYear = Date.year ~= InitialDate.year;
-			if (isNewYear) then
-				InitialDate = Date;
-				self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
-			end;
-		end);
+		local initialDate = os.date("*t", os.time());
+		local isLastMinute = false
+		
+		task.spawn(function()
+			while true do
+				local currentDate = os.date("*t", os.time());
+				local isNewYear = currentDate.year ~= initialDate.year;
+				isLastMinute = isLastMinute or (currentDate.yday == 365 and currentDate.hour == 23 and currentDate.min == 59)
+
+				if isNewYear then
+					initialDate = currentDate
+					isLastMinute = false
+					self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
+				end
+				task.wait(if isLastMinute then nil else 30)
+			end
+		end)
 	end;
 
 	if (handleUpsertAndRetrieval) then
