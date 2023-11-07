@@ -247,10 +247,19 @@ function Board:Destroy()
 	end;
 end
 
+-- Make indexing the class with the wrong key throw an error
+setmetatable(Board, {
+	__index = function(_, key)
+		error(`Attempt to get Board:{tostring(key)} (not a valid member)`, 2);
+	end,
+	__newindex = function(_, key, _)
+		error(`Attempt to set Board:{tostring(key)} (not a valid member)`, 2);
+	end,
+})
+
 return table.freeze({
 	new = Board.new,
-	Start = Board.Start,
-	UpdateData = Board.UpdateData,
 	GetTopData = Board.GetTopData,
+	Update = Board.Update,
 	Destroy = Board.Destroy,
 })

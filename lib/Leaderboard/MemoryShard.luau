@@ -299,6 +299,16 @@ function MemoryShard:Destroy()
 
 end
 
+-- Make indexing the wrong key throw an error
+setmetatable(MemoryShard, {
+	__index = function(_, key)
+		error(`Attempt to get MemoryShard:{tostring(key)} (not a valid member)`, 2);
+	end,
+	__newindex = function(_, key, _)
+		error(`Attempt to set MemoryShard:{tostring(key)} (not a valid member)`, 2);
+	end,
+})
+
 return table.freeze({
 	new = MemoryShard.new,
 });

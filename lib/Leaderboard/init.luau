@@ -308,9 +308,25 @@ function Leaderboard:Destroy()
 	end;
 end
 
+-- Make indexing the class with the wrong key throw an error
+setmetatable(Leaderboard, {
+	__index = function(_, key)
+		error(`Attempt to get Leaderboard:{tostring(key)} (not a valid member)`, 2);
+	end,
+	__newindex = function(_, key, _)
+		error(`Attempt to set Leaderboard:{tostring(key)} (not a valid member)`, 2);
+	end,
+})
+
 return table.freeze({
 	new = Leaderboard.new,
-	UpdateData = Leaderboard.UpdateData,
-	GetTopData = Leaderboard.GetTopData,
+	IncrementValue = Leaderboard.IncrementValue,
+	IncrementValues = Leaderboard.IncrementValues,
+	UpdateValue = Leaderboard.UpdateValue,
+	UpdateValues = Leaderboard.UpdateValues,
+	UpdateStoreValue = Leaderboard.UpdateStoreValue,
+	UpdateStoreValues = Leaderboard.UpdateStoreValues,
+	GetAllTop = Leaderboard.GetAllTop,
+	GetSpecifcTop = Leaderboard.GetSpecifcTop,
 	Destroy = Leaderboard.Destroy,
 })
