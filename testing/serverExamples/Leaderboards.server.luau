@@ -46,13 +46,15 @@ local function UpdateLeaderboards()
 	for _, player in Players:GetPlayers() do
 		UpdateMoneyLeaderstats(player.UserId, 9999);
 	end;
+
+	-- Test userIds
 	UpdateMoneyLeaderstats(100, 100);
 	UpdateMoneyLeaderstats(101, 100);
 
 	-- You can also do MoneyLeaderboard:GetAllTopData("Asc", {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100});
-	MoneyLeaderboard:GetTop(VALUES_TO_COLLECT):andThen(function(boards)
+	MoneyLeaderboard:GetAllTop(VALUES_TO_COLLECT):andThen(function(boards)
 		for _, board in pairs(boards) do
-			print(`Updating board {board.Type} - with {#board.Data} items`);
+			print(`Updating board {board.Type} - with {#board.Data} items!`);
 			UpdateBoard(board.Data, workspace.Leaderboards[board.Type]);
 		end;
 	end);
