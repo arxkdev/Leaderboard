@@ -32,8 +32,8 @@ type AllTopData = {
 type Object = {
 	__index: Object,
 	UpdateValue: (self: Leaderboard, boardType: LeaderboardType, userId: number, value: number | (number) -> (number)) -> (),
-	AllTopData: (self: Leaderboard, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
-	GetTopData: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
+	GetTop: (self: Leaderboard, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
+	GetSpecifcTop: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, rollingExpiry: number?) -> Leaderboard,
 }
@@ -81,7 +81,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	return self;
 end
 
-function Leaderboard:TopData(boardType, amount, sortDirection)
+function Leaderboard:GetSpecifcTop(boardType, amount, sortDirection)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
 	SmartAssert(amount > 0, "Amount must be greater than 0");
@@ -96,7 +96,7 @@ function Leaderboard:TopData(boardType, amount, sortDirection)
 	return BoardClass:GetTopData(amount, sortDirection);
 end
 
-function Leaderboard:AllTopData(optionalRange, sortDirection)
+function Leaderboard:GetTop(optionalRange, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
 

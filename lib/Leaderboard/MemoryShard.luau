@@ -155,6 +155,67 @@ function MemoryShard:GetShardKey(userId)
 	return ShardIndex;
 end
 
+function MemoryShard:GetTopData(topAmount, sortDirection)
+	SmartAssert(topAmount, "topAmount must be provided");
+	SmartAssert(sortDirection, "sortDirection must be provided");
+	SmartAssert(typeof(topAmount) == "number", "topAmount must be a number");
+	SmartAssert(typeof(sortDirection) == "string", "sortDirection must be a string");
+	local CombinedResults = {};
+
+	-- Go through the shards, extract the data, and combine it
+	for _, Shard in self.Shards do
+		local Success, Result = pcall(function()
+			local data = Shard:GetRangeAsync(
+				Enum.SortDirection[sortDirection],
+				topAmount
+			);
+			if (self.Type == "Rolling") then
+				for _, entry in data do
+					-- get rid of expiry and creation date padding, convert back to number
+					entry.value = tonumber(entry.value.value)
+				end
+			end
+			return data
+		end);
+
+		if (not Success) then
+			warn(Result);
+			continue; -- Skip this shard, there was a problem with it
+		end;
+
+		for _, entry in Result do
+			local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
+			if (Found) then
+				local FoundValueHigherThanCurrent = (Found.value > entry.value);
+				if (not FoundValueHigherThanCurrent) then
+					-- The found value already there, is LOWER than this new one, update it
+					CombinedResults[IndexFound].value = entry.value;
+				end;
+			else
+				-- There is no found value, add it to the combined results
+				table.insert(CombinedResults, {
+					key = tonumber(entry.key),
+					value = entry.value
+				});
+			end;
+		end;
+	end;
+
+	-- Sort it
+	table.sort(CombinedResults, function(a, b)
+		return a.value > b.value;
+	end);
+
+	-- Take off excess
+	if (#CombinedResults > topAmount) then
+		for i = #CombinedResults, topAmount + 1, -1 do
+			table.remove(CombinedResults, i);
+		end;
+	end;
+
+	return CombinedResults;
+end
+
 function MemoryShard:UpdateValue(userId, value)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(value, "transformer must be provided");
@@ -218,67 +279,6 @@ function MemoryShard:UpdateValue(userId, value)
 		return false;
 	end;
 	return true;
-end
-
-function MemoryShard:GetTopData(topAmount, sortDirection)
-	SmartAssert(topAmount, "topAmount must be provided");
-	SmartAssert(sortDirection, "sortDirection must be provided");
-	SmartAssert(typeof(topAmount) == "number", "topAmount must be a number");
-	SmartAssert(typeof(sortDirection) == "string", "sortDirection must be a string");
-	local CombinedResults = {};
-
-	-- Go through the shards, extract the data, and combine it
-	for _, Shard in self.Shards do
-		local Success, Result = pcall(function()
-			local data = Shard:GetRangeAsync(
-				Enum.SortDirection[sortDirection],
-				topAmount
-			);
-			if (self.Type == "Rolling") then
-				for _, entry in data do
-					-- get rid of expiry and creation date padding, convert back to number
-					entry.value = tonumber(entry.value.value)
-				end
-			end
-			return data
-		end);
-
-		if (not Success) then
-			warn(Result);
-			continue; -- Skip this shard, there was a problem with it
-		end;
-
-		for _, entry in Result do
-			local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
-			if (Found) then
-				local FoundValueHigherThanCurrent = (Found.value > entry.value);
-				if (not FoundValueHigherThanCurrent) then
-					-- The found value already there, is LOWER than this new one, update it
-					CombinedResults[IndexFound].value = entry.value;
-				end;
-			else
-				-- There is no found value, add it to the combined results
-				table.insert(CombinedResults, {
-					key = tonumber(entry.key),
-					value = entry.value
-				});
-			end;
-		end;
-	end;
-
-	-- Sort it
-	table.sort(CombinedResults, function(a, b)
-		return a.value > b.value;
-	end);
-
-	-- Take off excess
-	if (#CombinedResults > topAmount) then
-		for i = #CombinedResults, topAmount + 1, -1 do
-			table.remove(CombinedResults, i);
-		end;
-	end;
-
-	return CombinedResults;
 end
 
 function MemoryShard:Destroy()
