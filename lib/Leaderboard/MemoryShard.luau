@@ -30,16 +30,16 @@ export type TopData = {
 
 type Object = {
 	__index: Object,
-	UpdateData: (self: Shards, userId: number, transformer: number | (number) -> (number)) -> (),
-	GetTopData: (self: Shards, amount: number, sortDirection: string) -> {TopData},
-	GetShardKey: (self: Shards, userId: number) -> (number),
-	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> Shards,
-	Destroy: (self: Shards) -> (),
+	UpdateValue: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> (),
+	GetTopData: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
+	GetShardKey: (self: MemoryShard, userId: number) -> (number),
+	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard,
+	Destroy: (self: MemoryShard) -> (),
 }
-export type Shards = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
+export type MemoryShard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 
-local Shards: Object = {} :: Object;
-Shards.__index = Shards;
+local MemoryShard: Object = {} :: Object;
+MemoryShard.__index = MemoryShard;
 
 local function dPrint(...)
 	if (DEBUG) then
@@ -126,8 +126,8 @@ local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	return nil;
 end
 
-function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?)
-	local self = setmetatable({} :: LeaderboardArguments, Shards);
+function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?)
+	local self = setmetatable({} :: LeaderboardArguments, MemoryShard);
 	self.Shards = {};
 
 	for i = 1, shardCount do
@@ -142,7 +142,7 @@ function Shards.new(leaderboardType: LeaderboardType, serviceKey: string, shardC
 	return self;
 end
 
-function Shards:GetShardKey(userId)
+function MemoryShard:GetShardKey(userId)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
 
@@ -155,11 +155,11 @@ function Shards:GetShardKey(userId)
 	return ShardIndex;
 end
 
-function Shards:UpdateData(userId, transformer)
+function MemoryShard:UpdateValue(userId, value)
 	SmartAssert(userId, "userId must be provided");
-	SmartAssert(transformer, "transformer must be provided");
+	SmartAssert(value, "transformer must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
-	SmartAssert(typeof(transformer) == "function" or typeof(transformer) == "number", "transformer must be a function or a number");
+	SmartAssert(typeof(value) == "function" or typeof(value) == "number", "transformer must be a function or a number");
 
 	-- Get the shard key, shard, leaderboard type, and user key
 	local ShardKey = self:GetShardKey(userId);
@@ -174,7 +174,7 @@ function Shards:UpdateData(userId, transformer)
 			local firstTime = oldValue == nil;
 			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value);
 
-			local transformedValue = (typeof(transformer) == "function" and transformer(oldValue) or transformer);
+			local transformedValue = (typeof(value) == "function" and value(oldValue) or value);
 			local compressedValue = Compression.Compress(transformedValue);
 			local newSortKey = transformedValue;
 
@@ -201,7 +201,7 @@ function Shards:UpdateData(userId, transformer)
 			Key,
 			function(oldValue)
 				oldValue = oldValue or 0;
-				local transformedValue = (typeof(transformer) == "function") and transformer(oldValue) or transformer;
+				local transformedValue = (typeof(value) == "function") and value(oldValue) or value;
 				local compressedValue = Compression.Compress(transformedValue);
 				local newSortKey = transformedValue;
 				if (compressedValue and newSortKey) then
@@ -220,7 +220,7 @@ function Shards:UpdateData(userId, transformer)
 	return true;
 end
 
-function Shards:GetTopData(topAmount, sortDirection)
+function MemoryShard:GetTopData(topAmount, sortDirection)
 	SmartAssert(topAmount, "topAmount must be provided");
 	SmartAssert(sortDirection, "sortDirection must be provided");
 	SmartAssert(typeof(topAmount) == "number", "topAmount must be a number");
@@ -281,10 +281,10 @@ function Shards:GetTopData(topAmount, sortDirection)
 	return CombinedResults;
 end
 
-function Shards:Destroy()
+function MemoryShard:Destroy()
 
 end
 
 return table.freeze({
-	new = Shards.new,
+	new = MemoryShard.new,
 });

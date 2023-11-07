@@ -2,38 +2,19 @@
 	Arxk was here
 ]]
 
--- DataStoreService to handle longer than 42 days (all time most likely)
-local DataStoreService = game:GetService("DataStoreService");
-local UserService = game:GetService("UserService");
-local Players = game:GetService("Players");
-
 -- Requirements
+local Board = require(script.Board);
 local Promise = require(script.Promise);
-local Signal = require(script.Signal);
-local Shards = require(script.Shards);
-local Compression = require(script.Compression);
 
 -- Constants
-local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
-	["Hourly"] = 1,
-	["Daily"] = 3,
-	["Weekly"] = 10,
-	["Monthly"] = 15,
-}
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
-local DEBUG = false;
-local DEFAULT_TOP_AMOUNT = 100;
-local DEFAULT_UPDATE_INTERVAL = 120;
+local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime", "Rolling"};
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
-type Shard = Shards.Shards;
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
 export type LeaderboardArguments = {
 	ServiceKey: string,
-	Type: LeaderboardType,
-	StoreUsing: string,
-	Store: MemoryStoreSortedMap | OrderedDataStore | Shard,
-	LeaderboardUpdated: Signal.Signal<{TopData}>,
+	Types: {LeaderboardType},
 	_threads: {thread},
 }
 export type TopData = {
@@ -44,46 +25,25 @@ export type TopData = {
 	DisplayName: string,
 }
 
+type AllTopData = {
+	Type: LeaderboardType,
+	Data: {TopData},
+}
 type Object = {
 	__index: Object,
-	_threads: {thread},
-	UpdateInterval: number,
-	TopAmount: number,
-	UpsertFunction: ((Leaderboard) -> ())?,
-	Start: (self: Object, topAmount: number, interval: number, func: (Leaderboard) -> ()) -> (),
-	UpdateData: (self: Leaderboard, userId: number, transformer: number | (number) -> (number)) -> (),
-	GetTopData: (self: Leaderboard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
+	UpdateValue: (self: Leaderboard, boardType: LeaderboardType, userId: number, value: number | (number) -> (number)) -> (),
+	GetAllTopData: (self: Leaderboard, amount: number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
+	GetTopData: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Leaderboard) -> (),
-	new: (serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?) -> Leaderboard,
+	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, rollingExpiry: number?) -> Leaderboard,
 }
 
-type UpsertFunctionType = (Leaderboard) -> ();
+type Board = Board.Board;
 export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 
 -- Start
-local Leaderboards = {} :: {[string]: Leaderboard}; -- To handle automatic upserting and retrieval
-local UserIdsCache = {}; -- To assign userids {username, displayName}
-
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
-Leaderboard.UpsertFunction = nil;
-Leaderboard.UpdateInterval = DEFAULT_UPDATE_INTERVAL;
-Leaderboard.TopAmount = DEFAULT_TOP_AMOUNT;
-Leaderboard._threads = {};
-
-local function dPrint(...)
-	if (DEBUG) then
-		warn(`[Leaderboard]`, ...);
-	end;
-end
-
-local function Map<T>(tbl: {T}, fn: (T, number) -> (any)): {any}
-    local t = {};
-    for i, v in ipairs(tbl) do
-        t[i] = fn(v, i);
-    end;
-    return t;
-end
 
 local function SmartAssert(condition: boolean, message: string)
 	if (not condition) then
@@ -91,192 +51,86 @@ local function SmartAssert(condition: boolean, message: string)
 	end;
 end
 
-local function RollingShardCalculation(rollingExpiry: number): number
-	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
-	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
+local function IsValidLeaderboardType(leaderboardType: LeaderboardType): boolean
+	return table.find(BOARD_TYPES, leaderboardType);
 end
 
-function Leaderboard:Start(interval: number, topAmount: number, func: UpsertFunctionType)
-	Leaderboard.UpsertFunction = func;
-	Leaderboard.UpdateInterval = interval;
-	Leaderboard.TopAmount = topAmount;
-
-	local thread = task.spawn(function()
-		while (true) do
-			if (Leaderboard.UpsertFunction) then
-				for _, v in Leaderboards do
-					task.spawn(pcall, Leaderboard.UpsertFunction, v); -- This can be ran on a separate thread as it is not critical before the next update
-					v:GetTopData(Leaderboard.TopAmount):andThen(function(data)
-						v.LeaderboardUpdated:Fire(data);
-					end);
-				end;
-			end;
-			task.wait(Leaderboard.UpdateInterval);
-		end;
-	end);
-	table.insert(Leaderboard._threads, thread);
-end
-
--- Helpers
-local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
-	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
-		local shardCount = leaderboardType == "Rolling" and RollingShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
-		return "MemoryStore", Shards.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
-	elseif (leaderboardType == "Yearly") then
-		local currentYear = DateTime.now():ToUniversalTime().Year;
-		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{currentYear}:{serviceKey}`);
-	end;
-
-	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
-end
-
-local function GetUserInfosFromId(userId: number): (string, string)
-	userId = tonumber(userId);
-
-	-- First, check if the cache contains the name
-	if (UserIdsCache[userId]) then
-		local Username, DisplayName = unpack(UserIdsCache[userId]);
-		return Username, DisplayName;
-	end;
-
-	-- Second, check if the user is already connected to the server
-	local player = Players:GetPlayerByUserId(userId);
-	if (player) then
-		UserIdsCache[userId] = {player.Name, player.DisplayName};
-		return player.Name, player.DisplayName;
-	end;
-
-	-- If all else fails, send a request
-	local Success, Result = pcall(function()
-		return UserService:GetUserInfosByUserIdsAsync({userId});
-	end);
-	if (not Success) then
-		warn(`Leaderboard had trouble getting user info: {Result}`);
-		return "Unknown", "Unknown";
-	end;
-	local Username = Result[1] and Result[1].Username or "Unknown";
-	local DisplayName = Result[1] and Result[1].DisplayName or "Unknown";
-	UserIdsCache[userId] = {Username, DisplayName};
-	return Username, DisplayName;
-end
-
-local function Transform(rank: number, key: number, value: number): TopData
-	local Username, DisplayName = GetUserInfosFromId(key);
-	return {
-		Rank = rank,
-		Value = Compression.Decompress(value),
-		UserId = key,
-		Username = Username,
-		DisplayName = DisplayName,
-	};
-end
-
-function Leaderboard.new(serviceKey: string, leaderboardType: LeaderboardType, handleUpsertAndRetrieval: boolean?, rollingExpiry: number?)
-	if (leaderboardType == "Rolling" and rollingExpiry ~= nil) then
+function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}, rollingExpiry: number?)
+	if (table.find(leaderboardTypes, "Rolling") and rollingExpiry ~= nil) then
 		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY, `Rolling expiry must be within 60 and {MEMORY_STORE_SERVICE_MAX_EXPIRY} seconds`);
+	end;
+
+	-- Check if the leaderboard types are valid
+	SmartAssert(#leaderboardTypes > 0, "Leaderboard types must be greater than 0");
+	for _, v in ipairs(leaderboardTypes) do
+		SmartAssert(IsValidLeaderboardType(v), `Leaderboard type {v} is not valid`);
 	end;
 
 	local self = setmetatable({} :: LeaderboardArguments, Leaderboard);
 
 	self.ServiceKey = serviceKey;
-	self.Type = leaderboardType;
-	self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
-	self.LeaderboardUpdated = Signal.new();
-	self._threads = {};
+	self.Types = leaderboardTypes;
+	self.Boards = {};
 
-	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
-	-- Ty Proxus for writing this
-	if (leaderboardType == "Yearly") then
-		local initialDate = os.date("*t", os.time());
-		local isLastMinute = false;
-
-		local thread = task.spawn(function()
-			while (true) do
-				local currentDate = os.date("*t", os.time());
-				local isNewYear = currentDate.year ~= initialDate.year;
-				isLastMinute = isLastMinute or (currentDate.yday == 365 and currentDate.hour == 23 and currentDate.min == 59);
-
-				if (isNewYear) then
-					initialDate = currentDate;
-					isLastMinute = false;
-					self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
-				end;
-				task.wait(if isLastMinute then nil else 30);
-			end;
-		end);
-		table.insert(self._threads, thread);
+	-- Initialize boards
+	for _, v in ipairs(leaderboardTypes) do
+		local BoardKey = `{serviceKey}-{v}`;
+		self.Boards[v] = Board.new(BoardKey, v, rollingExpiry);
 	end;
 
-	if (handleUpsertAndRetrieval) then
-		dPrint(`Leaderboard ${serviceKey} is being handled automatically.`);
-		Leaderboards[serviceKey] = self;
-	end;
 	return self;
 end
 
-function Leaderboard:GetTopData(amount, sortDirection)
+function Leaderboard:GetTopData(boardType, amount, sortDirection)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
 	SmartAssert(amount > 0, "Amount must be greater than 0");
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
 
-	local function PromiseRetrieveTopData()
-		if (self.StoreType == "MemoryStore") then
-			local Data = self.Store:GetTopData(amount, sortDirection);
-			return Map(Data, function(v, rank)
-				return Transform(rank, v.key, v.value);
-			end);
-		else
-			local Result = self.Store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
-			local Data = Result:GetCurrentPage() :: {any};
-			return Map(Data, function(v, rank)
-				return Transform(rank, v.key, v.value);
-			end);
-		end;
+	local BoardClass = self.Boards[boardType] :: Board;
+	if (not BoardClass) then
+		error(`Board type ${boardType} does not exist`, 2);
 	end;
 
-	return Promise.new(function(resolve, reject)
-		local Success, Data = pcall(PromiseRetrieveTopData);
-
-		if (Success) then
-			dPrint(`Successfully retrieved top data for {self.ServiceKey}`);
-			resolve(Data);
-		else
-			warn(Success, Data);
-			reject(Data);
-		end;
-	end);
+	return BoardClass:GetTopData(amount, sortDirection);
 end
 
-function Leaderboard:UpdateData(userId, transformer)
+function Leaderboard:GetAllTopData(amount, sortDirection)
+	SmartAssert(type(amount) == "number", "Amount must be a number");
+	SmartAssert(amount <= 100, "You can only get the top 100.");
+	SmartAssert(amount > 0, "Amount must be greater than 0");
+	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
+	sortDirection = sortDirection or "Descending";
+
+	local Promises = {};
+	for _, v in ipairs(self.Types) do
+		local BoardClass = self.Boards[v] :: Board;
+		if (not BoardClass) then
+			error(`Board type {v} does not exist`, 2);
+		end;
+
+		table.insert(Promises, BoardClass:GetTopData(amount, sortDirection):andThen(function(data)
+			return {
+				Type = v,
+				Data = data,
+			}
+		end));
+	end;
+
+	return Promise.all(Promises);
+end
+
+function Leaderboard:UpdateValue(boardType, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
-	SmartAssert(type(transformer) == "function" or type(transformer) == "number", "Transformer must be a function or a number");
+	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
 
-	-- If we are using a MemoryStore, we can just update the data
-	if (self.StoreType == "MemoryStore") then
-		self.Store:UpdateData(userId, transformer);
-		dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
-		return;
+	local BoardClass = self.Boards[boardType] :: Board;
+	if (not BoardClass) then
+		error(`Board type ${boardType} does not exist`, 2);
 	end;
 
-	-- Using an actual DataStore, we need to set the data
-	local Success, Error = pcall(function()
-		self.Store:UpdateAsync(userId, function(oldValue)
-			oldValue = oldValue or 0;
-			local transformedValue = (type(transformer) == "function") and transformer(oldValue) or transformer;
-			if (type(transformedValue) == "number") then
-				local compressedValue = Compression.Compress(transformedValue);
-				return compressedValue;
-			end;
-			return nil;
-		end);
-	end);
-	if (not Success) then
-		warn(`Leaderboard had trouble saving: {Error}`);
-	end;
-
-	dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
+	return BoardClass:UpdateValue(userId, value);
 end
 
 function Leaderboard:Destroy()
@@ -284,10 +138,6 @@ function Leaderboard:Destroy()
 		for _, v in ipairs(thread) do
 			task.cancel(v);
 		end;
-	end;
-
-	if (Leaderboards[self.ServiceKey]) then
-		Leaderboards[self.ServiceKey] = nil;
 	end;
 end
 

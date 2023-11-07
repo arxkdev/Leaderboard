@@ -7,24 +7,13 @@ local Leaderboard = require(Lib.Leaderboard);
 
 type TopData = {Leaderboard.TopData};
 
-local Key = 1;
-local AllTimeLeaderboard = Leaderboard.new(`AllTime-{Key}`, "AllTime", true);
-local HourlyLeaderboard = Leaderboard.new(`Hourly-{Key}`, "Hourly", true);
-local DailyLeaderboard = Leaderboard.new(`Daily-{Key}`, "Daily", true);
-local WeeklyLeaderboard = Leaderboard.new(`Weekly-{Key}`, "Weekly", true);
-local MonthlyLeaderboard = Leaderboard.new(`Monthly-{Key}`, "Monthly", true);
-
--- Starts with an interval of 120, collect the top 100, and the upsert function as described below
+-- Constants
 local INTERVAL = 120;
 local VALUES_TO_COLLECT = 100;
-Leaderboard:Start(INTERVAL, VALUES_TO_COLLECT, function(leaderboard)
-	-- In here you'd likely get all the current (TotalValues) in their data, and apply
-	for _, player in Players:GetPlayers() do
-		leaderboard:UpdateData(player.UserId, 10000);
-	end;
-	leaderboard:UpdateData(100, 100);
-	leaderboard:UpdateData(101, 1010);
-end)
+
+local Key = 1;
+local Leaderboards = {"Hourly", "Daily", "Weekly", "Monthly", "AllTime"};
+local MoneyLeaderboard = Leaderboard.new(`Money-{Key}`, Leaderboards);
 
 local function UpdateBoard(data: TopData, model: Model)
 	-- Remove current items
@@ -46,57 +35,34 @@ local function UpdateBoard(data: TopData, model: Model)
 	end;
 end
 
-AllTimeLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
-	print("AllTime", leaderboardTop);
-	UpdateBoard(leaderboardTop, workspace.Leaderboards.AllTime);
+local function UpdateMoneyLeaderstats(playerId: number, amount: number)
+    for _, timeFrame in ipairs(Leaderboards) do
+        MoneyLeaderboard:UpdateValue(timeFrame, playerId, amount);
+    end;
+end
+
+local function UpdateLeaderboards()
+	-- Set the stats
+	for _, player in Players:GetPlayers() do
+		UpdateMoneyLeaderstats(player.UserId, 9999);
+	end;
+	UpdateMoneyLeaderstats(100, 100);
+	UpdateMoneyLeaderstats(101, 100);
+
+	MoneyLeaderboard:GetAllTopData(VALUES_TO_COLLECT):andThen(function(boards)
+		for _, board in pairs(boards) do
+			print(`Updating board {board.Type} - with {#board.Data} items`);
+			UpdateBoard(board.Data, workspace.Leaderboards[board.Type]);
+		end;
+	end);
+end
+
+task.wait(2);
+print("Starting leadeboards");
+
+task.spawn(function()
+	while (true) do
+		UpdateLeaderboards();
+		task.wait(INTERVAL);
+	end;
 end)
-
-HourlyLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
-	print("Hourly", leaderboardTop);
-	UpdateBoard(leaderboardTop, workspace.Leaderboards.Hourly);
-end)
-
-DailyLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
-	print("Daily", leaderboardTop);
-	UpdateBoard(leaderboardTop, workspace.Leaderboards.Daily);
-end)
-
-WeeklyLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
-	print("Weekly", leaderboardTop);
-	UpdateBoard(leaderboardTop, workspace.Leaderboards.Weekly);
-end)
-
-MonthlyLeaderboard.LeaderboardUpdated:Connect(function(leaderboardTop)
-	print("Monthly", leaderboardTop);
-	UpdateBoard(leaderboardTop, workspace.Leaderboards.Monthly);
-end)
-
---local function UpdateLeaderboards()
---	-- Set the stats
---	for _, player in Players:GetPlayers() do
---		DailyLeaderboard:UpdateData(player.UserId, 10);
---		AllTimeLeaderboard:UpdateData(player.UserId, 10);
---	end;
---	DailyLeaderboard:UpdateData(100, 100);
---	AllTimeLeaderboard:UpdateData(100, 100);
-
---	-- Retrieve the top list
---	DailyLeaderboard:GetTopData(100):andThen(function(topList)
---		print("DailyTopList", topList);
---	end);
-
---	-- Retrieve the top list all time
---	AllTimeLeaderboard:GetTopData(100):andThen(function(allTimeTopList)
---		print("AllTimeTopList", allTimeTopList);
---	end);
---end
-
---task.wait(5)
---print("Starting leadeboards")
-
---task.spawn(function()
---	while (true) do
---		UpdateLeaderboards();
---		task.wait(120);
---	end;
---end)
