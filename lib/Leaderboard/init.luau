@@ -16,12 +16,13 @@ local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime"
 export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
 export type LeaderboardArguments = {
-	ServiceKey: string,
-	Types: {LeaderboardType},
-	Boards: {LeaderboardType: Board},
-	ValueQueue: {[number]: {Amount: number, BoardType: LeaderboardType, CreationTime: number, Board: Board}},
 	Updated: Signal.Signal<{AllTopData}>,
+	__serviceKey: string,
+	__types: {LeaderboardType},
+	__boards: {LeaderboardType: Board},
+	__valueQueue: {[number]: {Amount: number, BoardType: LeaderboardType, CreationTime: number, Board: Board}},
 	_threads: {thread},
+	_connections: {RBXScriptConnection},
 }
 export type TopData = {
 	Rank: number,
@@ -38,7 +39,11 @@ type AllTopData = {
 type Object = {
 	__index: Object,
 	IncrementValue: (self: Leaderboard, boardType: LeaderboardType, userId: number, amount: number) -> (),
+	IncrementValues: (self: Leaderboard, boardTypes: {LeaderboardType}, userId: number, amount: number) -> (),
 	UpdateValue: (self: Leaderboard, boardType: LeaderboardType, userId: number, value: number | (number) -> (number)) -> (),
+	UpdateValues: (self: Leaderboard, boardTypes: {LeaderboardType}, userId: number, value: number | (number) -> (number)) -> (),
+	UpdateStoreValue: (self: Leaderboard, boardType: LeaderboardType, userId: number, value: number | (number) -> (number)) -> boolean,
+	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType}, userId: number, value: number | (number) -> (number)) -> (),
 	GetAllTop: (self: Leaderboard, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	GetSpecifcTop: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Leaderboard) -> (),
@@ -87,18 +92,21 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 
 	local self = setmetatable({} :: LeaderboardArguments, Leaderboard);
 
-	self.ServiceKey = serviceKey;
-	self.Types = leaderboardTypes;
-	self.Boards = {};
-	self.ValueQueue = {};
+	-- Public properties
 	self.Updated = Signal.new();
+
+	-- Private properties
+	self.__serviceKey = serviceKey;
+	self.__types = leaderboardTypes;
+	self.__boards = {};
+	self.__valueQueue = {};
 	self._threads = {};
 	self._connections = {};
 
 	-- Initialize boards
 	for _, v in ipairs(leaderboardTypes) do
 		local BoardKey = `{serviceKey}-{v}`;
-		self.Boards[v] = Board.new(BoardKey, v, rollingExpiry);
+		self.__boards[v] = Board.new(BoardKey, v, rollingExpiry);
 	end;
 
 	-- Start automation
@@ -106,7 +114,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 		local Thread = task.spawn(function()
 			while (true) do
 				-- Update the value from the queue
-				for UserId, Data in pairs(self.ValueQueue) do
+				for UserId, Data in pairs(self.__valueQueue) do
 					local Success = Data.Board:Update(UserId, function(oldValue)
 						if (Data.Amount < oldValue) then
 							return oldValue;
@@ -114,7 +122,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 						return (oldValue + Data.Amount); -- Increment the value
 					end);
 					if (Success) then
-						self.ValueQueue[UserId] = nil;
+						self.__valueQueue[UserId] = nil;
 					end;
 				end;
 
@@ -131,15 +139,15 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	-- Player removing
 	self._connections[#self._connections + 1] = Players.PlayerRemoving:Connect(function(player)
 		-- Remove the player from the value queue
-		if (self.ValueQueue[player.UserId]) then
-			self.ValueQueue[player.UserId] = nil;
+		if (self.__valueQueue[player.UserId]) then
+			self.__valueQueue[player.UserId] = nil;
 		end;
 	end);
 
 	return self;
 end
 
--- Gets the data for a specific board
+-- Gets the data for a specific board (should only be used every 90-120 seconds)
 function Leaderboard:GetSpecifcTop(boardType, amount, sortDirection)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
@@ -147,7 +155,7 @@ function Leaderboard:GetSpecifcTop(boardType, amount, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
 
-	local BoardClass = self.Boards[boardType] :: Board;
+	local BoardClass = self.__boards[boardType] :: Board;
 	if (not BoardClass) then
 		error(`Board type ${boardType} does not exist`, 2);
 	end;
@@ -155,7 +163,7 @@ function Leaderboard:GetSpecifcTop(boardType, amount, sortDirection)
 	return BoardClass:GetTopData(amount, sortDirection);
 end
 
--- Gets the data for all the top boards
+-- Gets the data for all the top boards (should only be used every 90-120 seconds)
 function Leaderboard:GetAllTop(optionalRange, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
@@ -178,8 +186,8 @@ function Leaderboard:GetAllTop(optionalRange, sortDirection)
 
 	-- Get all the data
 	local Promises = {};
-	for _, v in ipairs(self.Types) do
-		local BoardClass = self.Boards[v] :: Board;
+	for _, v in ipairs(self.__types) do
+		local BoardClass = self.__boards[v] :: Board;
 		if (not BoardClass) then
 			error(`Board type {v} does not exist`, 2);
 		end;
@@ -201,21 +209,32 @@ function Leaderboard:IncrementValue(boardType, userId, amount)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 
-	local BoardClass = self.Boards[boardType] :: Board;
+	local BoardClass = self.__boards[boardType] :: Board;
 	if (not BoardClass) then
 		error(`Board type ${boardType} does not exist`, 2);
 	end;
 
 	-- Update the value queue
-	if (not self.ValueQueue[userId]) then
-		self.ValueQueue[userId] = {
+	if (not self.__valueQueue[userId]) then
+		self.__valueQueue[userId] = {
 			Amount = amount,
 			BoardType = boardType,
 			Board = BoardClass,
 			CreationTime = os.time(),
 		};
 	else
-		self.ValueQueue[userId].Amount += amount;
+		self.__valueQueue[userId].Amount += amount;
+	end;
+end
+
+-- Increments the queued value(s)
+function Leaderboard:IncrementValues(boardTypes, userId, amount)
+	SmartAssert(type(userId) == "number", "UserId must be a number");
+	SmartAssert(type(amount) == "number", "Amount must be a number");
+	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
+
+	for _, v in ipairs(boardTypes) do
+		self:IncrementValue(v, userId, amount);
 	end;
 end
 
@@ -224,21 +243,32 @@ function Leaderboard:UpdateValue(boardType, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
 
-	local BoardClass = self.Boards[boardType] :: Board;
+	local BoardClass = self.__boards[boardType] :: Board;
 	if (not BoardClass) then
 		error(`Board type ${boardType} does not exist`, 2);
 	end;
 
 	-- Update the value queue
-	if (not self.ValueQueue[userId]) then
-		self.ValueQueue[userId] = {
+	if (not self.__valueQueue[userId]) then
+		self.__valueQueue[userId] = {
 			Amount = value,
 			BoardType = boardType,
 			Board = BoardClass,
 			CreationTime = os.time(),
 		};
 	else
-		self.ValueQueue[userId].Amount = value;
+		self.__valueQueue[userId].Amount = value;
+	end;
+end
+
+-- Updates the queued value(s)
+function Leaderboard:UpdateValues(boardTypes, userId, value)
+	SmartAssert(type(userId) == "number", "UserId must be a number");
+	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
+	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
+
+	for _, v in ipairs(boardTypes) do
+		self:UpdateValue(v, userId, value);
 	end;
 end
 
@@ -247,12 +277,23 @@ function Leaderboard:UpdateStoreValue(boardType, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
 
-	local BoardClass = self.Boards[boardType] :: Board;
+	local BoardClass = self.__boards[boardType] :: Board;
 	if (not BoardClass) then
 		error(`Board type ${boardType} does not exist`, 2);
 	end;
 
 	return BoardClass:Update(userId, value);
+end
+
+-- Updates the actual store value(s) (should only be used every 90-120 seconds)
+function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
+	SmartAssert(type(userId) == "number", "UserId must be a number");
+	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
+	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
+
+	for _, v in ipairs(boardTypes) do
+		self:UpdateStoreValue(v, userId, value);
+	end;
 end
 
 function Leaderboard:Destroy()

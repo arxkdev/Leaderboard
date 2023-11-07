@@ -16,10 +16,10 @@ local DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime" | "Rolling";
 export type MemoryShard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 export type LeaderboardArguments = {
-	Type: LeaderboardType,
-	FallbackExpiry: number,
-	Shards: {MemoryStoreSortedMap},
-	ShardCount: number,
+	__type: LeaderboardType,
+	__fallbackExpiry: number,
+	__shards: {MemoryStoreSortedMap},
+	__shardCount: number,
 }
 export type TopData = {
 	Rank: number,
@@ -31,9 +31,9 @@ export type TopData = {
 
 type Object = {
 	__index: Object,
+	__getShardKey: (self: MemoryShard, userId: number) -> (number),
 	UpdateShardValue: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> boolean,
 	GetTopShardData: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
-	GetShardKey: (self: MemoryShard, userId: number) -> (number),
 	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard,
 	Destroy: (self: MemoryShard) -> (),
 }
@@ -128,22 +128,22 @@ end
 
 function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?)
 	local self = setmetatable({} :: LeaderboardArguments, MemoryShard);
-	self.Shards = {};
+	self.__shards = {};
 
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
-		self.Shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
+		self.__shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
 		dPrint(`Cerated MemoryStoreSortedMap for _Shared{tostring(i)}`);
 	end;
 
-	self.ShardCount = shardCount;
-	self.Type = leaderboardType;
-	self.FallbackExpiry = (leaderboardType == "Rolling" and rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self.Type];
+	self.__shardCount = shardCount;
+	self.__type = leaderboardType;
+	self.__fallbackExpiry = (leaderboardType == "Rolling" and rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self.__type];
 	return self;
 end
 
 -- Gets the Shard Key using prefixing and modulo
-function MemoryShard:GetShardKey(userId)
+function MemoryShard:__getShardKey(userId)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
 
@@ -152,7 +152,7 @@ function MemoryShard:GetShardKey(userId)
 	local HashPrefix = tonumber(string.sub(ShaHash, 1, 8), 16);
 
 	-- Use the modulo operation to get the shard index
-	local ShardIndex = (HashPrefix % self.ShardCount) + 1;
+	local ShardIndex = (HashPrefix % self.__shardCount) + 1;
 	return ShardIndex;
 end
 
@@ -165,13 +165,13 @@ function MemoryShard:GetTopShardData(topAmount, sortDirection)
 	local CombinedResults = {};
 
 	-- Go through the shards, extract the data, and combine it
-	for _, Shard in self.Shards do
+	for _, Shard in self.__shards do
 		local Success, Result = pcall(function()
 			local data = Shard:GetRangeAsync(
 				Enum.SortDirection[sortDirection],
 				topAmount
 			);
-			if (self.Type == "Rolling") then
+			if (self.__type == "Rolling") then
 				for _, entry in data do
 					-- get rid of expiry and creation date padding, convert back to number
 					entry.value = tonumber(entry.value.value)
@@ -226,9 +226,9 @@ function MemoryShard:UpdateShardValue(userId, value)
 	SmartAssert(typeof(value) == "function" or typeof(value) == "number", "transformer must be a function or a number");
 
 	-- Get the shard key, shard, leaderboard type, and user key
-	local ShardKey = self:GetShardKey(userId);
-	local Shard = self.Shards[ShardKey] or self.Shards[1];
-	local LeaderboardType = self.Type;
+	local ShardKey = self:__getShardKey(userId);
+	local Shard = self.__shards[ShardKey] or self.__shards[1];
+	local LeaderboardType = self.__type;
 	local Key = tostring(userId);
 
 	-- Rolling support
@@ -250,7 +250,7 @@ function MemoryShard:UpdateShardValue(userId, value)
 			local newValue = {
 				value = compressedValue, -- this will be the value we save, we need to save as table to carry over creation data
 				__created = if (typeof(oldValue) ~= "table") then os.time() else oldValue.__created,
-				__expiry = self.FallbackExpiry
+				__expiry = self.__fallbackExpiry
 			};
 			-- update the value with appropriate expiry time left
 			Shard:SetAsync(Key, newValue, newValue.__expiry - (os.time() - newValue.__created), newSortKey);
@@ -284,7 +284,7 @@ function MemoryShard:UpdateShardValue(userId, value)
 				end;
 				return nil;
 			end,
-			GetExpiry(LeaderboardType) or self.FallbackExpiry
+			GetExpiry(LeaderboardType) or self.__fallbackExpiry
 		);
 	end);
 

@@ -35,19 +35,15 @@ local function UpdateBoard(data: TopData, model: Model)
 		item.Parent = model.BoardPart.UI.List;
 	end;
 end
-local function IncrementMoneyStats(playerId: number, amount: number)
-    for _, timeFrame in ipairs(Leaderboards) do
-        MoneyLeaderboard:IncrementValue(timeFrame, playerId, amount);
-    end;
-end
 local function IncrementMoney()
 	for _, player in pairs(Players:GetPlayers()) do
-		IncrementMoneyStats(player.UserId, 111);
+		MoneyLeaderboard:IncrementValues(Leaderboards, player.UserId, 111);
 	end;
 
 	-- Test userIds
-	IncrementMoneyStats(100, 100);
-	IncrementMoneyStats(101, 100);
+	local FakeId1, FakeId2 = 100, 101;
+	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId1, 100);
+	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId2, 100);
 end
 IncrementMoney();
 

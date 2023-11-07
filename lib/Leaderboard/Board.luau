@@ -9,7 +9,6 @@ local Players = game:GetService("Players");
 
 -- Requirements
 local Promise = require(script.Parent.Promise);
-local Signal = require(script.Parent.Signal);
 local MemoryShard = require(script.Parent.MemoryShard);
 local Compression = require(script.Parent.Compression);
 
@@ -26,11 +25,11 @@ local DEBUG = false;
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
 export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
 export type BoardArguments = {
-	ServiceKey: string,
-	Type: LeaderboardType,
-	StoreUsing: string,
-	Store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
-	_threads: {thread},
+	__serviceKey: string,
+	__type: LeaderboardType,
+	__storeUsing: string,
+	__store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
+	__threads: {thread},
 }
 export type TopData = {
 	Rank: number,
@@ -75,24 +74,6 @@ local function SmartAssert(condition: boolean, message: string)
 	end;
 end
 
-local function RollingShardCalculation(rollingExpiry: number): number
-	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
-	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
-end
-
--- Helpers
-local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
-	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
-		local shardCount = leaderboardType == "Rolling" and RollingShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
-		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
-	elseif (leaderboardType == "Yearly") then
-		local currentYear = DateTime.now():ToUniversalTime().Year;
-		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{currentYear}:{serviceKey}`);
-	end;
-
-	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
-end
-
 local function GetUserInfosFromId(userId: number): (string, string)
 	userId = tonumber(userId);
 
@@ -134,15 +115,29 @@ local function Transform(rank: number, key: number, value: number): TopData
 	};
 end
 
+local function ShardCalculation(rollingExpiry: number): number
+	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
+	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
+end
+
+local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
+	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
+		local shardCount = leaderboardType == "Rolling" and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
+		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
+	elseif (leaderboardType == "Yearly") then
+		local currentYear = DateTime.now():ToUniversalTime().Year;
+		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{currentYear}:{serviceKey}`);
+	end;
+
+	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
+end
+
 function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?)
 	local self = setmetatable({} :: BoardArguments, Board);
 
-	self.ServiceKey = serviceKey;
-	self.Types = leaderboardType;
-	self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
-	self.LeaderboardUpdated = Signal.new();
-	self.BoardCache = {};
-	self._threads = {};
+	self.__serviceKey = serviceKey;
+	self.__storeType, self.__store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
+	self.__threads = {};
 
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
 	-- Ty Proxus for writing this
@@ -179,13 +174,13 @@ function Board:GetTopData(amount, sortDirection)
 	sortDirection = sortDirection or "Descending";
 
 	local function PromiseRetrieveTopData()
-		if (self.StoreType == "MemoryStore") then
-			local Data = self.Store:GetTopShardData(amount, sortDirection);
+		if (self.__storeType == "MemoryStore") then
+			local Data = self.__store:GetTopShardData(amount, sortDirection);
 			return Map(Data, function(v, rank)
 				return Transform(rank, v.key, v.value);
 			end);
 		else
-			local Result = self.Store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
+			local Result = self.__store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
 			local Data = Result:GetCurrentPage() :: {any};
 			return Map(Data, function(v, rank)
 				return Transform(rank, v.key, v.value);
@@ -197,7 +192,7 @@ function Board:GetTopData(amount, sortDirection)
 		local Success, Data = pcall(PromiseRetrieveTopData);
 
 		if (Success) then
-			dPrint(`Successfully retrieved top data for {self.ServiceKey}`);
+			dPrint(`Successfully retrieved top data for {self.__serviceKey}`);
 			resolve(Data);
 		else
 			warn(Success, Data);
@@ -212,14 +207,14 @@ function Board:Update(userId, value)
 	SmartAssert(type(value) == "function" or type(value) == "number", "Transformer must be a function or a number");
 
 	-- If we are using a MemoryStore, we can just update the data
-	if (self.StoreType == "MemoryStore") then
-		dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
-		return self.Store:UpdateShardValue(userId, value);
+	if (self.__storeType == "MemoryStore") then
+		dPrint(`Successfully updated data for ${userId} in {self.__serviceKey}`);
+		return self.__store:UpdateShardValue(userId, value);
 	end;
 
 	-- Using an actual DataStore, we need to set the data
 	local Success, Error = pcall(function()
-		self.Store:UpdateAsync(userId, function(oldValue)
+		self.__store:UpdateAsync(userId, function(oldValue)
 			oldValue = oldValue and Compression.Decompress(oldValue) or 0;
 			local transformedValue = (type(value) == "function") and value(oldValue) or value;
 
@@ -240,7 +235,7 @@ function Board:Update(userId, value)
 		return false;
 	end;
 
-	dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
+	dPrint(`Successfully updated data for ${userId} in {self.__serviceKey}`);
 	return true;
 end
 
