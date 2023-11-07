@@ -1,10 +1,12 @@
 --[[
 	Arxk was here
 ]]
+local Players = game:GetService("Players");
 
 -- Requirements
 local Board = require(script.Board);
 local Promise = require(script.Promise);
+local Signal = require(script.Signal);
 
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
@@ -16,6 +18,9 @@ export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearl
 export type LeaderboardArguments = {
 	ServiceKey: string,
 	Types: {LeaderboardType},
+	Boards: {LeaderboardType: Board},
+	ValueCache: {[number]: {Amount: number, BoardType: LeaderboardType}},
+	Updated: Signal.Signal<{AllTopData}>,
 	_threads: {thread},
 }
 export type TopData = {
@@ -37,9 +42,14 @@ type Object = {
 	GetAllTop: (self: Leaderboard, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	GetSpecifcTop: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Leaderboard) -> (),
-	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, rollingExpiry: number?) -> Leaderboard,
+	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard,
 }
 type Board = Board.Board;
+type AutomationSettings = {
+	Automation: boolean,
+	Interval: number,
+	ValuesToCollect: number | {[string]: number},
+}
 
 -- Start
 local Leaderboard: Object = {} :: Object;
@@ -55,7 +65,7 @@ local function IsValidLeaderboardType(leaderboardType: LeaderboardType): boolean
 	return table.find(BOARD_TYPES, leaderboardType);
 end
 
-function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}, rollingExpiry: number?)
+function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?)
 	if (table.find(leaderboardTypes, "Rolling") and rollingExpiry ~= nil) then
 		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY, `Rolling expiry must be within 60 and {MEMORY_STORE_SERVICE_MAX_EXPIRY} seconds`);
 		SmartAssert(type(rollingExpiry) == "number", "Rolling expiry must be a number");
@@ -67,11 +77,23 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 		SmartAssert(IsValidLeaderboardType(v), `Leaderboard type {v} is not valid`);
 	end;
 
+	-- Asserts for settings
+	if (automationSettings) then
+		SmartAssert(type(automationSettings) == "table", "Settings must be a table");
+		SmartAssert(type(automationSettings.Automation) == "nil" or type(automationSettings.Automation) == "boolean", "Automation must be a boolean");
+		SmartAssert(type(automationSettings.Interval) == "nil" or type(automationSettings.Interval) == "number", "Interval must be a number");
+		SmartAssert(type(automationSettings.ValuesToCollect) == "nil" or type(automationSettings.ValuesToCollect) == "number" or type(automationSettings.ValuesToCollect) == "table", "ValuesToCollect must be a number or a table");
+	end;
+
 	local self = setmetatable({} :: LeaderboardArguments, Leaderboard);
 
 	self.ServiceKey = serviceKey;
 	self.Types = leaderboardTypes;
 	self.Boards = {};
+	self.ValueCache = {};
+	self.Updated = Signal.new();
+	self._threads = {};
+	self._connections = {};
 
 	-- Initialize boards
 	for _, v in ipairs(leaderboardTypes) do
@@ -79,9 +101,39 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 		self.Boards[v] = Board.new(BoardKey, v, rollingExpiry);
 	end;
 
+	-- Start automation
+	if (automationSettings and automationSettings.Automation) then
+		local Thread = task.spawn(function()
+			while (true) do
+				-- Update the value from the cache
+				for UserId, Data in pairs(self.ValueCache) do
+					self:UpdateValue(Data.BoardType, UserId, Data.Amount);
+				end;
+
+				-- Get the top and update the signal
+				self:GetAllTop(automationSettings.ValuesToCollect):andThen(function(boards)
+					self.Updated:Fire(boards);
+				end);
+				task.wait(automationSettings.Interval);
+			end;
+		end);
+		table.insert(self._threads, Thread);
+	end;
+
+	-- Player removing
+	self._connections[#self._connections + 1] = Players.PlayerRemoving:Connect(function(player)
+		-- Remove the player from the value cache
+		for UserId in pairs(self.ValueCache) do
+			if (UserId == player.UserId) then
+				self.ValueCache[UserId] = nil;
+			end;
+		end;
+	end);
+
 	return self;
 end
 
+-- Gets the data for a specific board
 function Leaderboard:GetSpecifcTop(boardType, amount, sortDirection)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
@@ -97,6 +149,7 @@ function Leaderboard:GetSpecifcTop(boardType, amount, sortDirection)
 	return BoardClass:GetTopData(amount, sortDirection);
 end
 
+-- Gets the data for all the top boards
 function Leaderboard:GetAllTop(optionalRange, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
@@ -137,6 +190,7 @@ function Leaderboard:GetAllTop(optionalRange, sortDirection)
 	return Promise.all(Promises);
 end
 
+-- Increments the cached value
 function Leaderboard:IncrementValue(boardType, userId, amount)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(amount) == "number", "Amount must be a number");
@@ -146,10 +200,40 @@ function Leaderboard:IncrementValue(boardType, userId, amount)
 		error(`Board type ${boardType} does not exist`, 2);
 	end;
 
-	return BoardClass:Increment(userId, amount);
+	-- Update the value cache
+	if (not self.ValueCache[userId]) then
+		self.ValueCache[userId] = {
+			Amount = amount,
+			BoardType = boardType,
+		};
+	else
+		self.ValueCache[userId].Amount += amount;
+	end;
 end
 
+-- Updates the cached value
 function Leaderboard:UpdateValue(boardType, userId, value)
+	SmartAssert(type(userId) == "number", "UserId must be a number");
+	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
+
+	local BoardClass = self.Boards[boardType] :: Board;
+	if (not BoardClass) then
+		error(`Board type ${boardType} does not exist`, 2);
+	end;
+
+	-- Update the value cache
+	if (not self.ValueCache[userId]) then
+		self.ValueCache[userId] = {
+			Amount = value,
+			BoardType = boardType,
+		};
+	else
+		self.ValueCache[userId].Amount = value;
+	end;
+end
+
+-- Updates the actual store value (should only be used every 90-120 seconds)
+function Leaderboard:UpdateStoreValue(boardType, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
 
@@ -162,10 +246,14 @@ function Leaderboard:UpdateValue(boardType, userId, value)
 end
 
 function Leaderboard:Destroy()
-	for _, thread in {self._threads, Leaderboard._threads} do
+	for _, thread in ipairs(self._threads) do
 		for _, v in ipairs(thread) do
 			task.cancel(v);
 		end;
+	end;
+
+	for _, connection in ipairs(self._connections) do
+		connection:Disconnect();
 	end;
 end
 

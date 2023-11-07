@@ -142,6 +142,7 @@ function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, s
 	return self;
 end
 
+-- Gets the Shard Key using prefixing and modulo
 function MemoryShard:GetShardKey(userId)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
@@ -155,6 +156,7 @@ function MemoryShard:GetShardKey(userId)
 	return ShardIndex;
 end
 
+-- Gets the top data from all the shards for this MemoryShard
 function MemoryShard:GetTopShardData(topAmount, sortDirection)
 	SmartAssert(topAmount, "topAmount must be provided");
 	SmartAssert(sortDirection, "sortDirection must be provided");
@@ -216,6 +218,7 @@ function MemoryShard:GetTopShardData(topAmount, sortDirection)
 	return CombinedResults;
 end
 
+-- Updates the value for a specific user in a specific shard
 function MemoryShard:UpdateShardValue(userId, value)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(value, "transformer must be provided");
