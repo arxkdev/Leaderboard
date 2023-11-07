@@ -32,7 +32,7 @@ type AllTopData = {
 type Object = {
 	__index: Object,
 	UpdateValue: (self: Leaderboard, boardType: LeaderboardType, userId: number, value: number | (number) -> (number)) -> (),
-	GetAllTopData: (self: Leaderboard, amount: number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
+	GetAllTopData: (self: Leaderboard, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	GetTopData: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, rollingExpiry: number?) -> Leaderboard,
@@ -81,7 +81,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	return self;
 end
 
-function Leaderboard:GetTopData(boardType, amount, sortDirection)
+function Leaderboard:TopData(boardType, amount, sortDirection)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
 	SmartAssert(amount > 0, "Amount must be greater than 0");
@@ -96,13 +96,27 @@ function Leaderboard:GetTopData(boardType, amount, sortDirection)
 	return BoardClass:GetTopData(amount, sortDirection);
 end
 
-function Leaderboard:GetAllTopData(amount, sortDirection)
-	SmartAssert(type(amount) == "number", "Amount must be a number");
-	SmartAssert(amount <= 100, "You can only get the top 100.");
-	SmartAssert(amount > 0, "Amount must be greater than 0");
+function Leaderboard:AllTopData(optionalRange, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
 
+	-- Check if the optional range is valid
+	if (optionalRange) then
+		SmartAssert(type(optionalRange) == "number" or type(optionalRange) == "table", "Optional range must be a number or a table");
+		if (type(optionalRange) == "number") then
+			SmartAssert(optionalRange <= 100, "You can only get the top 100.");
+			SmartAssert(optionalRange > 0, "Optional range must be greater than 0");
+		else
+			for k, v in pairs(optionalRange) do
+				SmartAssert(IsValidLeaderboardType(k), `Leaderboard type {k} is not valid`);
+				SmartAssert(type(v) == "number", "Optional range values must be a number");
+				SmartAssert(v <= 100, "You can only get the top 100.");
+				SmartAssert(v > 0, "Optional range values must be greater than 0");
+			end;
+		end;
+	end;
+
+	-- Get all the data
 	local Promises = {};
 	for _, v in ipairs(self.Types) do
 		local BoardClass = self.Boards[v] :: Board;
@@ -110,7 +124,8 @@ function Leaderboard:GetAllTopData(amount, sortDirection)
 			error(`Board type {v} does not exist`, 2);
 		end;
 
-		table.insert(Promises, BoardClass:GetTopData(amount, sortDirection):andThen(function(data)
+		local Amount = optionalRange and (type(optionalRange) == "number" and optionalRange or optionalRange[v]) or 100;
+		table.insert(Promises, BoardClass:GetTopData(Amount, sortDirection):andThen(function(data)
 			return {
 				Type = v,
 				Data = data,

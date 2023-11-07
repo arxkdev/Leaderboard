@@ -49,7 +49,8 @@ local function UpdateLeaderboards()
 	UpdateMoneyLeaderstats(100, 100);
 	UpdateMoneyLeaderstats(101, 100);
 
-	MoneyLeaderboard:GetAllTopData(VALUES_TO_COLLECT):andThen(function(boards)
+	-- You can also do MoneyLeaderboard:GetAllTopData("Asc", {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100});
+	MoneyLeaderboard:AllTopData(VALUES_TO_COLLECT):andThen(function(boards)
 		for _, board in pairs(boards) do
 			print(`Updating board {board.Type} - with {#board.Data} items`);
 			UpdateBoard(board.Data, workspace.Leaderboards[board.Type]);
