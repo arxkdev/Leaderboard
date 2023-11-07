@@ -11,6 +11,12 @@ local Signal = require(script.Signal);
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime", "Rolling"};
+local EXPIRY_TIMES = {
+	["Hourly"] = 3600,
+	["Daily"] = 24 * 3600,
+	["Weekly"] = 7 * 24 * 3600,
+	["Monthly"] = 30 * 24 * 3600, -- Could be 31, but we'll use 30 for now
+}
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
 export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
@@ -19,7 +25,7 @@ export type LeaderboardArguments = {
 	ServiceKey: string,
 	Types: {LeaderboardType},
 	Boards: {LeaderboardType: Board},
-	ValueCache: {[number]: {Amount: number, BoardType: LeaderboardType}},
+	ValueCache: {[number]: {Amount: number, BoardType: LeaderboardType, CreationTime: number, Board: Board}},
 	Updated: Signal.Signal<{AllTopData}>,
 	_threads: {thread},
 }
@@ -107,7 +113,12 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 			while (true) do
 				-- Update the value from the cache
 				for UserId, Data in pairs(self.ValueCache) do
-					self:UpdateValue(Data.BoardType, UserId, Data.Amount);
+					Data.Board:Update(UserId, function(oldValue)
+						if (Data.Amount < oldValue) then
+							return oldValue;
+						end;
+						return (oldValue + Data.Amount);
+					end);
 				end;
 
 				-- Get the top and update the signal
@@ -129,6 +140,19 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 			end;
 		end;
 	end);
+
+	local CacheCheckThread = task.spawn(function()
+		while (true) do
+			-- We check the creation time of the cached amount, and if it's older than the expiry time, we remove it
+			for UserId, Data in pairs(self.ValueCache) do
+				if (os.time() - Data.CreationTime >= EXPIRY_TIMES[Data.BoardType]) then
+					self.ValueCache[UserId] = nil;
+				end;
+			end;
+			task.wait(1);
+		end;
+	end);
+	table.insert(self._threads, CacheCheckThread);
 
 	return self;
 end
@@ -205,6 +229,8 @@ function Leaderboard:IncrementValue(boardType, userId, amount)
 		self.ValueCache[userId] = {
 			Amount = amount,
 			BoardType = boardType,
+			Board = BoardClass,
+			CreationTime = os.time(),
 		};
 	else
 		self.ValueCache[userId].Amount += amount;
@@ -226,6 +252,8 @@ function Leaderboard:UpdateValue(boardType, userId, value)
 		self.ValueCache[userId] = {
 			Amount = value,
 			BoardType = boardType,
+			Board = BoardClass,
+			CreationTime = os.time(),
 		};
 	else
 		self.ValueCache[userId].Amount = value;

@@ -237,7 +237,6 @@ function MemoryShard:UpdateShardValue(userId, value)
 			local oldValue = Shard:GetAsync(Key);
 			local firstTime = oldValue == nil;
 			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value);
-
 			local transformedValue = (typeof(value) == "function" and value(oldValue) or value);
 
 			-- If their oldValue is greater than the new value, we don't want to update it
