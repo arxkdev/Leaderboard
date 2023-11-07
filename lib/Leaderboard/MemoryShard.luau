@@ -31,7 +31,7 @@ export type TopData = {
 
 type Object = {
 	__index: Object,
-	UpdateShardValue: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> (),
+	UpdateShardValue: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> boolean,
 	GetTopShardData: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
 	GetShardKey: (self: MemoryShard, userId: number) -> (number),
 	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard,

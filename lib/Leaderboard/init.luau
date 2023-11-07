@@ -11,12 +11,6 @@ local Signal = require(script.Signal);
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime", "Rolling"};
-local EXPIRY_TIMES = {
-	["Hourly"] = 3600,
-	["Daily"] = 24 * 3600,
-	["Weekly"] = 7 * 24 * 3600,
-	["Monthly"] = 30 * 24 * 3600, -- Could be 31, but we'll use 30 for now
-}
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
 export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
@@ -25,7 +19,7 @@ export type LeaderboardArguments = {
 	ServiceKey: string,
 	Types: {LeaderboardType},
 	Boards: {LeaderboardType: Board},
-	ValueCache: {[number]: {Amount: number, BoardType: LeaderboardType, CreationTime: number, Board: Board}},
+	ValueQueue: {[number]: {Amount: number, BoardType: LeaderboardType, CreationTime: number, Board: Board}},
 	Updated: Signal.Signal<{AllTopData}>,
 	_threads: {thread},
 }
@@ -96,7 +90,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	self.ServiceKey = serviceKey;
 	self.Types = leaderboardTypes;
 	self.Boards = {};
-	self.ValueCache = {};
+	self.ValueQueue = {};
 	self.Updated = Signal.new();
 	self._threads = {};
 	self._connections = {};
@@ -111,14 +105,17 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	if (automationSettings and automationSettings.Automation) then
 		local Thread = task.spawn(function()
 			while (true) do
-				-- Update the value from the cache
-				for UserId, Data in pairs(self.ValueCache) do
-					Data.Board:Update(UserId, function(oldValue)
+				-- Update the value from the queue
+				for UserId, Data in pairs(self.ValueQueue) do
+					local Success = Data.Board:Update(UserId, function(oldValue)
 						if (Data.Amount < oldValue) then
 							return oldValue;
 						end;
-						return (oldValue + Data.Amount);
+						return (oldValue + Data.Amount); -- Increment the value
 					end);
+					if (Success) then
+						self.ValueQueue[UserId] = nil;
+					end;
 				end;
 
 				-- Get the top and update the signal
@@ -133,27 +130,11 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 
 	-- Player removing
 	self._connections[#self._connections + 1] = Players.PlayerRemoving:Connect(function(player)
-		-- Remove the player from the value cache
-		for UserId in pairs(self.ValueCache) do
-			if (UserId == player.UserId) then
-				self.ValueCache[UserId] = nil;
-			end;
+		-- Remove the player from the value queue
+		if (self.ValueQueue[player.UserId]) then
+			self.ValueQueue[player.UserId] = nil;
 		end;
 	end);
-
-	-- Cache check because it might expire mid-game
-	local CacheCheckThread = task.spawn(function()
-		while (true) do
-			-- We check the creation time of the cached amount, and if it's older than the expiry time, we remove it
-			for UserId, Data in pairs(self.ValueCache) do
-				if (os.time() - Data.CreationTime >= EXPIRY_TIMES[Data.BoardType]) then
-					self.ValueCache[UserId] = nil;
-				end;
-			end;
-			task.wait(1);
-		end;
-	end);
-	table.insert(self._threads, CacheCheckThread);
 
 	return self;
 end
@@ -215,7 +196,7 @@ function Leaderboard:GetAllTop(optionalRange, sortDirection)
 	return Promise.all(Promises);
 end
 
--- Increments the cached value
+-- Increments the queued value
 function Leaderboard:IncrementValue(boardType, userId, amount)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(amount) == "number", "Amount must be a number");
@@ -225,20 +206,20 @@ function Leaderboard:IncrementValue(boardType, userId, amount)
 		error(`Board type ${boardType} does not exist`, 2);
 	end;
 
-	-- Update the value cache
-	if (not self.ValueCache[userId]) then
-		self.ValueCache[userId] = {
+	-- Update the value queue
+	if (not self.ValueQueue[userId]) then
+		self.ValueQueue[userId] = {
 			Amount = amount,
 			BoardType = boardType,
 			Board = BoardClass,
 			CreationTime = os.time(),
 		};
 	else
-		self.ValueCache[userId].Amount += amount;
+		self.ValueQueue[userId].Amount += amount;
 	end;
 end
 
--- Updates the cached value
+-- Updates the queued value
 function Leaderboard:UpdateValue(boardType, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
@@ -248,16 +229,16 @@ function Leaderboard:UpdateValue(boardType, userId, value)
 		error(`Board type ${boardType} does not exist`, 2);
 	end;
 
-	-- Update the value cache
-	if (not self.ValueCache[userId]) then
-		self.ValueCache[userId] = {
+	-- Update the value queue
+	if (not self.ValueQueue[userId]) then
+		self.ValueQueue[userId] = {
 			Amount = value,
 			BoardType = boardType,
 			Board = BoardClass,
 			CreationTime = os.time(),
 		};
 	else
-		self.ValueCache[userId].Amount = value;
+		self.ValueQueue[userId].Amount = value;
 	end;
 end
 

@@ -43,7 +43,7 @@ export type TopData = {
 type MemoryShard = MemoryShard.MemoryShard;
 type Object = {
 	__index: Object,
-	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> (),
+	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> boolean,
 	GetTopData: (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Board) -> (),
 	new: (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board,
@@ -213,9 +213,8 @@ function Board:Update(userId, value)
 
 	-- If we are using a MemoryStore, we can just update the data
 	if (self.StoreType == "MemoryStore") then
-		self.Store:UpdateShardValue(userId, value);
 		dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
-		return;
+		return self.Store:UpdateShardValue(userId, value);
 	end;
 
 	-- Using an actual DataStore, we need to set the data
@@ -238,9 +237,11 @@ function Board:Update(userId, value)
 	end);
 	if (not Success) then
 		warn(`Leaderboard had trouble saving: {Error}`);
+		return false;
 	end;
 
 	dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
+	return true;
 end
 
 function Board:Destroy()
