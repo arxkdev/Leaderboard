@@ -21,8 +21,8 @@ export type LeaderboardArguments = {
 	__types: {LeaderboardType},
 	__boards: {LeaderboardType: Board},
 	__valueQueue: {[number]: {Amount: number, BoardType: LeaderboardType, CreationTime: number, Board: Board}},
-	_threads: {thread},
-	_connections: {RBXScriptConnection},
+	__threads: {thread},
+	__connections: {RBXScriptConnection},
 }
 export type TopData = {
 	Rank: number,
@@ -46,6 +46,7 @@ type Object = {
 	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType}, userId: number, value: number | (number) -> (number)) -> (),
 	GetAllTop: (self: Leaderboard, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	GetSpecifcTop: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
+	UpdateBoardWithValues: (self: Leaderboard) -> (),
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard,
 }
@@ -100,8 +101,8 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	self.__types = leaderboardTypes;
 	self.__boards = {};
 	self.__valueQueue = {};
-	self._threads = {};
-	self._connections = {};
+	self.__threads = {};
+	self.__connections = {};
 
 	-- Initialize boards
 	for _, v in ipairs(leaderboardTypes) do
@@ -114,17 +115,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 		local Thread = task.spawn(function()
 			while (true) do
 				-- Update the value from the queue
-				for UserId, Data in pairs(self.__valueQueue) do
-					local Success = Data.Board:Update(UserId, function(oldValue)
-						if (Data.Amount < oldValue) then
-							return oldValue;
-						end;
-						return (oldValue + Data.Amount); -- Increment the value
-					end);
-					if (Success) then
-						self.__valueQueue[UserId] = nil;
-					end;
-				end;
+				self:UpdateBoardWithValues();
 
 				-- Get the top and update the signal
 				self:GetAllTop(automationSettings.ValuesToCollect):andThen(function(boards)
@@ -133,18 +124,33 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 				task.wait(automationSettings.Interval);
 			end;
 		end);
-		table.insert(self._threads, Thread);
+		table.insert(self.__threads, Thread);
 	end;
 
 	-- Player removing
-	self._connections[#self._connections + 1] = Players.PlayerRemoving:Connect(function(player)
+	table.insert(self.__connections, Players.PlayerRemoving:Connect(function(player)
 		-- Remove the player from the value queue
 		if (self.__valueQueue[player.UserId]) then
 			self.__valueQueue[player.UserId] = nil;
 		end;
-	end);
+	end));
 
 	return self;
+end
+
+-- Flushes the queue
+function Leaderboard:UpdateBoardWithValues()
+	for UserId, Data in pairs(self.__valueQueue) do
+		local Success = Data.Board:Update(UserId, function(oldValue)
+			if (Data.Amount < oldValue) then
+				return oldValue;
+			end;
+			return (oldValue + Data.Amount); -- Increment the value
+		end);
+		if (Success) then
+			self.__valueQueue[UserId] = nil;
+		end;
+	end;
 end
 
 -- Gets the data for a specific board (should only be used every 90-120 seconds)
@@ -297,13 +303,13 @@ function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 end
 
 function Leaderboard:Destroy()
-	for _, thread in ipairs(self._threads) do
+	for _, thread in ipairs(self.__threads) do
 		for _, v in ipairs(thread) do
 			task.cancel(v);
 		end;
 	end;
 
-	for _, connection in ipairs(self._connections) do
+	for _, connection in ipairs(self.__connections) do
 		connection:Disconnect();
 	end;
 end
