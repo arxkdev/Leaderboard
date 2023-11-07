@@ -31,7 +31,7 @@ export type TopData = {
 
 type Object = {
 	__index: Object,
-	UpdateValue: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> (),
+	UpdateShardValue: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> (),
 	GetTopShardData: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
 	GetShardKey: (self: MemoryShard, userId: number) -> (number),
 	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard,
@@ -236,6 +236,12 @@ function MemoryShard:UpdateShardValue(userId, value)
 			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value);
 
 			local transformedValue = (typeof(value) == "function" and value(oldValue) or value);
+
+			-- If their oldValue is greater than the new value, we don't want to update it
+			if (oldValue > transformedValue) then
+				return nil;
+			end;
+
 			local compressedValue = Compression.Compress(transformedValue);
 			local newSortKey = transformedValue;
 
@@ -261,8 +267,14 @@ function MemoryShard:UpdateShardValue(userId, value)
 		return Shard:UpdateAsync(
 			Key,
 			function(oldValue)
-				oldValue = oldValue or 0;
+				oldValue = oldValue and Compression.Decompress(oldValue) or 0;
 				local transformedValue = (typeof(value) == "function") and value(oldValue) or value;
+
+				-- If their oldValue is greater than the new value, we don't want to update it
+				if (oldValue > transformedValue) then
+					return nil;
+				end;
+
 				local compressedValue = Compression.Compress(transformedValue);
 				local newSortKey = transformedValue;
 				if (compressedValue and newSortKey) then

@@ -32,6 +32,7 @@ type AllTopData = {
 }
 type Object = {
 	__index: Object,
+	IncrementValue: (self: Leaderboard, boardType: LeaderboardType, userId: number, amount: number) -> (),
 	UpdateValue: (self: Leaderboard, boardType: LeaderboardType, userId: number, value: number | (number) -> (number)) -> (),
 	GetAllTop: (self: Leaderboard, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	GetSpecifcTop: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
@@ -136,6 +137,18 @@ function Leaderboard:GetAllTop(optionalRange, sortDirection)
 	return Promise.all(Promises);
 end
 
+function Leaderboard:IncrementValue(boardType, userId, amount)
+	SmartAssert(type(userId) == "number", "UserId must be a number");
+	SmartAssert(type(amount) == "number", "Amount must be a number");
+
+	local BoardClass = self.Boards[boardType] :: Board;
+	if (not BoardClass) then
+		error(`Board type ${boardType} does not exist`, 2);
+	end;
+
+	return BoardClass:Increment(userId, amount);
+end
+
 function Leaderboard:UpdateValue(boardType, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
@@ -158,7 +171,6 @@ end
 
 return table.freeze({
 	new = Leaderboard.new,
-	Start = Leaderboard.Start,
 	UpdateData = Leaderboard.UpdateData,
 	GetTopData = Leaderboard.GetTopData,
 	Destroy = Leaderboard.Destroy,

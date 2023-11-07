@@ -35,21 +35,21 @@ local function UpdateBoard(data: TopData, model: Model)
 	end;
 end
 
-local function UpdateMoneyLeaderstats(playerId: number, amount: number)
+local function IncrementMoneyStats(playerId: number, amount: number)
     for _, timeFrame in ipairs(Leaderboards) do
-        MoneyLeaderboard:UpdateValue(timeFrame, playerId, amount);
+        MoneyLeaderboard:IncrementValue(timeFrame, playerId, amount);
     end;
 end
 
 local function UpdateLeaderboards()
 	-- Set the stats
 	for _, player in Players:GetPlayers() do
-		UpdateMoneyLeaderstats(player.UserId, 9999);
+		IncrementMoneyStats(player.UserId, 9999);
 	end;
 
 	-- Test userIds
-	UpdateMoneyLeaderstats(100, 100);
-	UpdateMoneyLeaderstats(101, 100);
+	IncrementMoneyStats(100, 100);
+	IncrementMoneyStats(101, 100);
 
 	-- You can also do MoneyLeaderboard:GetAllTopData("Asc", {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100});
 	MoneyLeaderboard:GetAllTop(VALUES_TO_COLLECT):andThen(function(boards)

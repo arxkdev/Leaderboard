@@ -206,9 +206,33 @@ function Board:GetTopData(amount, sortDirection)
 end
 
 function Board:Increment(userId, amount)
-	-- Use the Board:UpdateData, but first lets use a cache
-	self.BoardCache[userId] = (self.BoardCache[userId] or 0) + amount;
+	-- This would typically be used in your GiveMoney/GiveCash/GiveCoins, whatever it might be function
+	SmartAssert(type(userId) == "number", "UserId must be a number");
+	SmartAssert(type(amount) == "number", "Amount must be a number");
 
+	-- If we are using a MemoryStore, we can just increment the data using Update
+	if (self.StoreType == "MemoryStore") then
+		self.Store:UpdateShardValue(userId, function(oldValue)
+			return (oldValue or 0) + amount;
+		end);
+		dPrint(`Successfully incremented data for ${userId} in ${self.ServiceKey}`);
+		return;
+	end;
+
+	-- Using an actual DataStore, we need to increment the data using Update
+	local Success, Error = pcall(function()
+		self.Store:UpdateAsync(userId, function(oldValue)
+			oldValue = oldValue and Compression.Decompress(oldValue) or 0;
+			local newValue = oldValue + amount;
+			local compressedValue = Compression.Compress(newValue);
+			return compressedValue;
+		end);
+	end);
+	if (not Success) then
+		warn(`Leaderboard had trouble saving: {Error}`);
+	end;
+
+	dPrint(`Successfully incremented data for ${userId} in ${self.ServiceKey}`);
 end
 
 function Board:Update(userId, value)
@@ -227,6 +251,12 @@ function Board:Update(userId, value)
 		self.Store:UpdateAsync(userId, function(oldValue)
 			oldValue = oldValue or 0;
 			local transformedValue = (type(value) == "function") and value(oldValue) or value;
+
+			-- If their oldValue is greater than the new value, we don't want to update it
+			if (oldValue > transformedValue) then
+				return nil;
+			end;
+
 			if (type(transformedValue) == "number") then
 				local compressedValue = Compression.Compress(transformedValue);
 				return compressedValue;
