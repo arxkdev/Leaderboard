@@ -83,7 +83,7 @@ local function RollingShardCalculation(rollingExpiry: number): number
 end
 
 -- Helpers
-local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | Shard)
+local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
 	if (leaderboardType ~= "Yearly" and leaderboardType ~= "AllTime") then
 		local shardCount = leaderboardType == "Rolling" and RollingShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
 		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, shardCount, rollingExpiry);
