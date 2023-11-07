@@ -141,6 +141,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 		end;
 	end);
 
+	-- Cache check because it might expire mid-game
 	local CacheCheckThread = task.spawn(function()
 		while (true) do
 			-- We check the creation time of the cached amount, and if it's older than the expiry time, we remove it
