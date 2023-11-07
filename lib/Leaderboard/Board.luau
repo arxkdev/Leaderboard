@@ -20,12 +20,11 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 	["Weekly"] = 10,
 	["Monthly"] = 15,
 }
-local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local DEBUG = false;
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
-type MemoryShard = MemoryShard.MemoryShard;
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
+export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
 export type BoardArguments = {
 	ServiceKey: string,
 	Type: LeaderboardType,
@@ -41,15 +40,14 @@ export type TopData = {
 	DisplayName: string,
 }
 
+type MemoryShard = MemoryShard.MemoryShard;
 type Object = {
 	__index: Object,
-	UpdateValue: (self: Board, userId: number, value: number | (number) -> (number)) -> (),
+	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> (),
 	GetTopData: (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Board) -> (),
 	new: (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board,
 }
-
-export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
 
 -- Start
 local UserIdsCache = {}; -- To assign userids {username, displayName}
@@ -137,10 +135,6 @@ local function Transform(rank: number, key: number, value: number): TopData
 end
 
 function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?)
-	if (leaderboardType == "Rolling" and rollingExpiry ~= nil) then
-		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY, `Rolling expiry must be within 60 and {MEMORY_STORE_SERVICE_MAX_EXPIRY} seconds`);
-	end;
-
 	local self = setmetatable({} :: BoardArguments, Board);
 
 	self.ServiceKey = serviceKey;
@@ -185,7 +179,7 @@ function Board:GetTopData(amount, sortDirection)
 
 	local function PromiseRetrieveTopData()
 		if (self.StoreType == "MemoryStore") then
-			local Data = self.Store:GetTopData(amount, sortDirection);
+			local Data = self.Store:GetTopShardData(amount, sortDirection);
 			return Map(Data, function(v, rank)
 				return Transform(rank, v.key, v.value);
 			end);
@@ -211,19 +205,19 @@ function Board:GetTopData(amount, sortDirection)
 	end);
 end
 
-function Board:IncrementValue(userId, amount)
+function Board:Increment(userId, amount)
 	-- Use the Board:UpdateData, but first lets use a cache
 	self.BoardCache[userId] = (self.BoardCache[userId] or 0) + amount;
 
 end
 
-function Board:UpdateValue(userId, value)
+function Board:Update(userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Transformer must be a function or a number");
 
 	-- If we are using a MemoryStore, we can just update the data
 	if (self.StoreType == "MemoryStore") then
-		self.Store:UpdateValue(userId, value);
+		self.Store:UpdateShardValue(userId, value);
 		dPrint(`Successfully updated data for ${userId} in ${self.ServiceKey}`);
 		return;
 	end;

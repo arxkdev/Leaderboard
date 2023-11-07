@@ -14,6 +14,7 @@ local DEBUG = false;
 local DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime" | "Rolling";
+export type MemoryShard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 export type LeaderboardArguments = {
 	Type: LeaderboardType,
 	FallbackExpiry: number,
@@ -31,12 +32,11 @@ export type TopData = {
 type Object = {
 	__index: Object,
 	UpdateValue: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> (),
-	GetTopData: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
+	GetTopShardData: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
 	GetShardKey: (self: MemoryShard, userId: number) -> (number),
 	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard,
 	Destroy: (self: MemoryShard) -> (),
 }
-export type MemoryShard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 
 local MemoryShard: Object = {} :: Object;
 MemoryShard.__index = MemoryShard;
@@ -155,7 +155,7 @@ function MemoryShard:GetShardKey(userId)
 	return ShardIndex;
 end
 
-function MemoryShard:GetTopData(topAmount, sortDirection)
+function MemoryShard:GetTopShardData(topAmount, sortDirection)
 	SmartAssert(topAmount, "topAmount must be provided");
 	SmartAssert(sortDirection, "sortDirection must be provided");
 	SmartAssert(typeof(topAmount) == "number", "topAmount must be a number");
@@ -216,7 +216,7 @@ function MemoryShard:GetTopData(topAmount, sortDirection)
 	return CombinedResults;
 end
 
-function MemoryShard:UpdateValue(userId, value)
+function MemoryShard:UpdateShardValue(userId, value)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(value, "transformer must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");

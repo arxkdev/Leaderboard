@@ -11,6 +11,7 @@ local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime", "Rolling"};
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
+export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
 export type LeaderboardArguments = {
 	ServiceKey: string,
@@ -37,9 +38,7 @@ type Object = {
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, rollingExpiry: number?) -> Leaderboard,
 }
-
 type Board = Board.Board;
-export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
 
 -- Start
 local Leaderboard: Object = {} :: Object;
@@ -58,6 +57,7 @@ end
 function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}, rollingExpiry: number?)
 	if (table.find(leaderboardTypes, "Rolling") and rollingExpiry ~= nil) then
 		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY, `Rolling expiry must be within 60 and {MEMORY_STORE_SERVICE_MAX_EXPIRY} seconds`);
+		SmartAssert(type(rollingExpiry) == "number", "Rolling expiry must be a number");
 	end;
 
 	-- Check if the leaderboard types are valid
@@ -145,7 +145,7 @@ function Leaderboard:UpdateValue(boardType, userId, value)
 		error(`Board type ${boardType} does not exist`, 2);
 	end;
 
-	return BoardClass:UpdateValue(userId, value);
+	return BoardClass:Update(userId, value);
 end
 
 function Leaderboard:Destroy()
