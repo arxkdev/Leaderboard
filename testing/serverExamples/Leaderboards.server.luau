@@ -13,7 +13,7 @@ local Leaderboards = {"Hourly", "Daily", "Weekly", "Monthly", "AllTime"};
 local MoneyLeaderboard = Leaderboard.new(`Money-{Key}`, Leaderboards, {
 	Automation = true,
 	Interval = 5,
-	ValuesToCollect = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
+	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 });
 
 local function UpdateBoard(data: TopData, model: Model)

@@ -59,7 +59,7 @@ type Board = Board.Board;
 type AutomationSettings = {
 	Automation: boolean,
 	Interval: number,
-	ValuesToCollect: number | {[string]: number},
+	RecordCount: number | {[string]: number},
 }
 
 -- Start
@@ -93,7 +93,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 		SmartAssert(type(automationSettings) == "table", "Settings must be a table");
 		SmartAssert(type(automationSettings.Automation) == "nil" or type(automationSettings.Automation) == "boolean", "Automation must be a boolean");
 		SmartAssert(type(automationSettings.Interval) == "nil" or type(automationSettings.Interval) == "number", "Interval must be a number");
-		SmartAssert(type(automationSettings.ValuesToCollect) == "nil" or type(automationSettings.ValuesToCollect) == "number" or type(automationSettings.ValuesToCollect) == "table", "ValuesToCollect must be a number or a table");
+		SmartAssert(type(automationSettings.RecordCount) == "nil" or type(automationSettings.RecordCount) == "number" or type(automationSettings.RecordCount) == "table", "RecordCount must be a number or a table");
 	end;
 
 	local self = setmetatable({} :: LeaderboardArguments, Leaderboard);
@@ -123,7 +123,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 				self:UpdateBoardWithValues();
 
 				-- Get the top and update the signal
-				self:GetAllTop(automationSettings.ValuesToCollect):andThen(function(boards)
+				self:GetAllTop(automationSettings.RecordCount):andThen(function(boards)
 					self.Updated:Fire(boards);
 				end);
 				task.wait(automationSettings.Interval);
