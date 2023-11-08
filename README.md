@@ -34,9 +34,9 @@ end
 MoneyLeaderboard.Updated:Connect(function(boards)
     -- This is where you would update the leaderboard GUI
     -- Returns us a table of all the boards that were updated
-	for _, board in boards do
-		print(`Updating board {board.Type} - with {#board.Data} items!`);
-	end;
+    for _, board in boards do
+        print(`Updating board {board.Type} - with {#board.Data} items!`);
+    end;
 end)
 ```
 
