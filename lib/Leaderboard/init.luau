@@ -73,7 +73,7 @@ local function SmartAssert(condition: boolean, message: string)
 end
 
 local function IsValidLeaderboardType(leaderboardType: LeaderboardType): boolean
-	return table.find(BOARD_TYPES, leaderboardType);
+	return table.find(BOARD_TYPES, leaderboardType) ~= nil;
 end
 
 function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?)
