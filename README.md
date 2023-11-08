@@ -22,8 +22,8 @@ local LeaderboardTypes = {"Daily", "Weekly", "Monthly", "AllTime"}
 local MoneyLeaderboard = Leaderboard.new(`Money_{Key}`, LeaderboardTypes, {
     -- Settings
     Automation = true,
-	Interval = 5,
-	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
+    Interval = 5,
+    RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 })
 
 local function FunctionToIncrementMoney(userId: number, amount: number)
