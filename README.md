@@ -21,7 +21,6 @@ local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard)
 
 local Key = 1 -- The key for the leaderboard (change to reset)
 local LeaderboardTypes = {"Daily", "Weekly", "Monthly", "AllTime"}
-
 local MoneyLeaderboard = Leaderboard.new(`Money_{Key}`, LeaderboardTypes, {
     -- Settings
     Automation = true,
@@ -51,7 +50,6 @@ local RECORD_COUNT = 100; -- Amount of records to get per board
 
 local Key = 1 -- The key for the leaderboard (change to reset)
 local LeaderboardTypes = {"Daily", "Weekly", "Monthly", "AllTime"}
-
 local MoneyLeaderboard = Leaderboard.new(`Money_{Key}`, LeaderboardTypes)
 
 local function FunctionToIncrementMoney(userId: number, amount: number)
@@ -69,7 +67,6 @@ local function UpdateLeaderboards()
     MoneyLeaderboard:RetrieveEntries("All", RECORD_COUNT):andThen(function(data)
         -- This is where you would update the leaderboard GUI
         -- Returns us a table of all the boards that were updated
-
         for _, board in data do
             print(`Updating board {board.Type} - with {#board.Data} items!`);
         end;
