@@ -54,6 +54,9 @@ MoneyLeaderboard.Updated:Connect(function(boards)
 		UpdateBoard(board.Data, workspace.Leaderboards[board.Type]);
 	end;
 end);
+-- MoneyLeaderboard.BoardUpdated:Connect(function(board)
+-- 	print(board.Type, board.Data);
+-- end);
 
 -- local function UpdateLeaderboards()
 -- 	-- Set the stats

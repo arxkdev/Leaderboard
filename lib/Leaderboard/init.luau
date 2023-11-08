@@ -17,6 +17,7 @@ export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: 
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
 export type LeaderboardArguments = {
 	Updated: Signal.Signal<{AllTopData}>,
+	BoardUpdated: Signal.Signal<{Type: LeaderboardType, Data: {TopData}}>,
 	__serviceKey: string,
 	__types: {LeaderboardType},
 	__boards: {LeaderboardType: Board},
@@ -100,6 +101,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 
 	-- Public properties
 	self.Updated = Signal.new();
+	self.BoardUpdated = Signal.new();
 
 	-- Private properties
 	self.__serviceKey = serviceKey;
@@ -125,6 +127,9 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 				-- Get the top and update the signal
 				self:GetAllTop(automationSettings.RecordCount):andThen(function(boards)
 					self.Updated:Fire(boards);
+					for _, board in boards do
+						self.BoardUpdated:Fire(board);
+					end;
 				end);
 				task.wait(automationSettings.Interval);
 			end;
