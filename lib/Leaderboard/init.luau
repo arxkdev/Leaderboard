@@ -348,7 +348,6 @@ return table.freeze({
 	IncrementValues = Leaderboard.IncrementValues,
 	UpdateValues = Leaderboard.UpdateValues,
 	UpdateStoreValues = Leaderboard.UpdateStoreValues,
-	GetAllTop = Leaderboard.GetAllTop,
-	GetSpecifcTop = Leaderboard.GetSpecifcTop,
+	RetrieveEntries = Leaderboard.RetrieveEntries,
 	Destroy = Leaderboard.Destroy,
 })
