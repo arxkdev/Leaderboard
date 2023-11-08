@@ -12,7 +12,7 @@ local Key = 1;
 local Leaderboards = {"Hourly", "Daily", "Weekly", "Monthly", "AllTime"};
 local MoneyLeaderboard = Leaderboard.new(`Money-{Key}`, Leaderboards, {
 	Automation = true,
-	Interval = 100,
+	Interval = 5,
 	ValuesToCollect = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 });
 
@@ -35,7 +35,7 @@ local function UpdateBoard(data: TopData, model: Model)
 		item.Parent = model.BoardPart.UI.List;
 	end;
 end
-local function IncrementMoney()
+local function IncrementMoneyTest()
 	for _, player in pairs(Players:GetPlayers()) do
 		MoneyLeaderboard:IncrementValues(Leaderboards, player.UserId, 111);
 	end;
@@ -45,10 +45,11 @@ local function IncrementMoney()
 	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId1, 100);
 	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId2, 100);
 end
-IncrementMoney();
 
+Players.PlayerAdded:Connect(IncrementMoneyTest);
 MoneyLeaderboard.Updated:Connect(function(boards)
-	for _, board in pairs(boards) do
+	-- Returns us a table of all the boards that were updated
+	for _, board in boards do
 		print(`Updating board {board.Type} - with {#board.Data} items!`);
 		UpdateBoard(board.Data, workspace.Leaderboards[board.Type]);
 	end;
