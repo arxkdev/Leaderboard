@@ -128,7 +128,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 				self:UpdateBoardWithValues();
 
 				-- Get the top and update the signal
-				self:GetAllTop(automationSettings.RecordCount):andThen(function(boards)
+				self:RetrieveEntries("All", automationSettings.RecordCount):andThen(function(boards)
 					self.Updated:Fire(boards);
 					for _, board in boards do
 						self.BoardUpdated:Fire(board);
