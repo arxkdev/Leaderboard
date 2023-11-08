@@ -295,10 +295,6 @@ function MemoryShard:UpdateShardValue(userId, value)
 	return true;
 end
 
-function MemoryShard:Destroy()
-
-end
-
 -- Make indexing the wrong key throw an error
 setmetatable(MemoryShard, {
 	__index = function(_, key)

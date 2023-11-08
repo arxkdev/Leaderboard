@@ -64,6 +64,7 @@ type AutomationSettings = {
 }
 
 -- Start
+local Leaderboards = {} :: {[string]: Leaderboard};
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 
@@ -85,7 +86,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 
 	-- Check if the leaderboard types are valid
 	SmartAssert(#leaderboardTypes > 0, "Leaderboard types must be greater than 0");
-	for _, v in ipairs(leaderboardTypes) do
+	for _, v in leaderboardTypes do
 		SmartAssert(IsValidLeaderboardType(v), `Leaderboard type {v} is not valid`);
 	end;
 
@@ -111,8 +112,11 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	self.__threads = {};
 	self.__connections = {};
 
+	-- Add to leaderboards
+	Leaderboards[serviceKey] = self;
+
 	-- Initialize boards
-	for _, v in ipairs(leaderboardTypes) do
+	for _, v in leaderboardTypes do
 		local BoardKey = `{serviceKey}-{v}`;
 		self.__boards[v] = Board.new(BoardKey, v, rollingExpiry);
 	end;
@@ -150,8 +154,8 @@ end
 
 -- Flushes the queue
 function Leaderboard:UpdateBoardWithValues()
-	for UserId, BoardType in pairs(self.__valueQueue) do
-		for _, Data in pairs(BoardType) do
+	for UserId, BoardType in self.__valueQueue do
+		for _, Data in BoardType do
 			local Success = Data.Board:Update(UserId, function(oldValue)
 				if (Data.Amount < oldValue) then
 					return oldValue;
@@ -193,7 +197,7 @@ function Leaderboard:GetAllTop(optionalRange, sortDirection)
 			SmartAssert(optionalRange <= 100, "You can only get the top 100.");
 			SmartAssert(optionalRange > 0, "Optional range must be greater than 0");
 		else
-			for k, v in pairs(optionalRange) do
+			for k, v in optionalRange do
 				SmartAssert(IsValidLeaderboardType(k), `Leaderboard type {k} is not valid`);
 				SmartAssert(type(v) == "number", "Optional range values must be a number");
 				SmartAssert(v <= 100, "You can only get the top 100.");
@@ -204,7 +208,7 @@ function Leaderboard:GetAllTop(optionalRange, sortDirection)
 
 	-- Get all the data
 	local Promises = {};
-	for _, v in ipairs(self.__types) do
+	for _, v in self.__types do
 		local BoardClass = self.__boards[v] :: Board;
 		if (not BoardClass) then
 			error(`Board type {v} does not exist`, 2);
@@ -240,7 +244,7 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 	end;
 
 	local Queue = self.__valueQueue[userId];
-	for _, v in ipairs(boardTypes) do
+	for _, v in boardTypes do
 		-- Update the value queue
 		if (not Queue[v]) then
 			Queue[v] = {
@@ -271,7 +275,7 @@ function Leaderboard:UpdateValues(boardTypes, userId, value)
 	end;
 
 	local Queue = self.__valueQueue[userId];
-	for _, v in ipairs(boardTypes) do
+	for _, v in boardTypes do
 		-- Update the value queue
 		if (not Queue[v]) then
 			Queue[v] = {
@@ -296,7 +300,7 @@ function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 		boardTypes = self.__types;
 	end;
 
-	for _, v in ipairs(boardTypes) do
+	for _, v in boardTypes do
 		local BoardClass = self.__boards[v] :: Board;
 		if (not BoardClass) then
 			error(`Board type {v} does not exist`, 2);
@@ -306,17 +310,40 @@ function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 	end;
 end
 
+-- Destroys the leaderboard
 function Leaderboard:Destroy()
-	for _, thread in ipairs(self.__threads) do
-		for _, v in ipairs(thread) do
-			task.cancel(v);
+	-- Update the value from the queue
+	self:UpdateBoardWithValues();
+
+	-- Destroy all the boards
+	for _, board in self.__boards do
+		board:Destroy();
+	end;
+
+	-- Cancel all the threads
+	for _, thread in self.__threads do
+		if (typeof(thread) == "thread") then
+			task.cancel(thread);
 		end;
 	end;
 
-	for _, connection in ipairs(self.__connections) do
+	-- Disconnect all the connections
+	for _, connection in self.__connections do
 		connection:Disconnect();
 	end;
+
+	-- Remove from leaderboards
+	if (Leaderboards[self.__serviceKey]) then
+		Leaderboards[self.__serviceKey] = nil;
+	end;
 end
+
+-- Bind to close, destroy all the leaderboards
+game:BindToClose(function()
+	for _, leaderboard in Leaderboards do
+		leaderboard:Destroy();
+	end;
+end);
 
 -- Make indexing the class with the wrong key throw an error
 setmetatable(Leaderboard, {

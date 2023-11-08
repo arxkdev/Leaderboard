@@ -62,7 +62,7 @@ end
 
 local function Map<T>(tbl: {T}, fn: (T, number) -> (any)): {any}
     local t = {};
-    for i, v in ipairs(tbl) do
+    for i, v in tbl do
         t[i] = fn(v, i);
     end;
     return t;
@@ -159,7 +159,7 @@ function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rolling
 				task.wait(if isLastMinute then nil else 30);
 			end;
 		end);
-		table.insert(self._threads, thread);
+		table.insert(self.__threads, thread);
 	end;
 
 	return self;
@@ -239,10 +239,12 @@ function Board:Update(userId, value)
 	return true;
 end
 
+-- Destroys the board
 function Board:Destroy()
-	for _, thread in self._threads do
-		for _, v in ipairs(thread) do
-			task.cancel(v);
+	-- Destroy the threads
+	for _, thread in self.__threads do
+		if (typeof(thread) == "thread") then
+			task.cancel(thread);
 		end;
 	end;
 end

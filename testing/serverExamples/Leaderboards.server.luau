@@ -36,7 +36,7 @@ local function UpdateBoard(data: TopData, model: Model)
 	end;
 end
 local function IncrementMoneyTest()
-	for _, player in pairs(Players:GetPlayers()) do
+	for _, player in Players:GetPlayers() do
 		MoneyLeaderboard:IncrementValues(Leaderboards, player.UserId, 111);
 	end;
 
@@ -70,7 +70,7 @@ end);
 
 -- 	-- You can also do MoneyLeaderboard:GetAllTopData("Asc", {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100});
 -- 	MoneyLeaderboard:GetAllTop(VALUES_TO_COLLECT):andThen(function(boards)
--- 		for _, board in pairs(boards) do
+-- 		for _, board in boards do
 -- 			print(`Updating board {board.Type} - with {#board.Data} items!`);
 -- 			UpdateBoard(board.Data, workspace.Leaderboards[board.Type]);
 -- 		end;
