@@ -46,9 +46,9 @@ type AllTopData = {
 }
 type Object = {
 	__index: Object,
-	IncrementValues: (self: Leaderboard, boardTypes: {LeaderboardType} | nil, userId: number, amount: number) -> (),
-	UpdateValues: (self: Leaderboard, boardTypes: {LeaderboardType} | nil, userId: number, value: number | (number) -> (number)) -> (),
-	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType} | nil, userId: number, value: number | (number) -> (number)) -> (),
+	IncrementValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, amount: number) -> (),
+	UpdateValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
+	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	GetAllTop: (self: Leaderboard, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	GetSpecifcTop: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	UpdateBoardWithValues: (self: Leaderboard) -> (),
@@ -224,8 +224,8 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
 
-	-- If boardTypes is nil, increment all the boards
-	if (not boardTypes) then
+	-- If boardTypes is all, increment all the boards
+	if (boardTypes == "All") then
 		boardTypes = self.__types;
 	end;
 
@@ -255,8 +255,8 @@ function Leaderboard:UpdateValues(boardTypes, userId, value)
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
 	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
 
-	-- If boardTypes is nil, update all the boards
-	if (not boardTypes) then
+	-- If boardTypes is all, update all the boards
+	if (boardTypes == "All") then
 		boardTypes = self.__types;
 	end;
 
@@ -286,8 +286,8 @@ function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
 	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
 
-	-- If boardTypes is nil, update all the boards
-	if (not boardTypes) then
+	-- If boardTypes is all, update all the boards
+	if (boardTypes == "All") then
 		boardTypes = self.__types;
 	end;
 
