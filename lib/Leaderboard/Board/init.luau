@@ -8,10 +8,15 @@ local UserService = game:GetService("UserService");
 local Players = game:GetService("Players");
 
 -- Requirements
+local MemoryShard = require(script.MemoryShard);
 local Promise = require(script.Parent.Promise);
-local MemoryShard = require(script.Parent.MemoryShard);
-local Compression = require(script.Parent.Compression);
-local ExponentialBackoff = require(script.Parent.ExponentialBackoff);
+local Util = require(script.Parent.Util);
+
+-- Variables
+local Compression = Util.Compression;
+local ExponentialBackoff = Util.ExponentialBackoff;
+local SmartAssert = Util.SmartAssert;
+local Map = Util.Map;
 
 -- Constants
 local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
@@ -102,20 +107,6 @@ Board.__index = Board;
 local function dPrint(...)
 	if (DEBUG) then
 		warn(`[Leaderboard]`, ...);
-	end;
-end
-
-local function Map<T>(tbl: {T}, fn: (T, number) -> (any)): {T}
-    local t = {};
-    for i, v in tbl do
-        t[i] = fn(v, i);
-    end;
-    return t;
-end
-
-local function SmartAssert(condition: boolean, message: string)
-	if (not condition) then
-		error(message, 2);
 	end;
 end
 

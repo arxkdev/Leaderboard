@@ -1,19 +1,26 @@
 -- Instead of one monolithic leaderboard, we can use multiple shards to store the data
 local MemoryStoreService = game:GetService("MemoryStoreService");
 
-local Compression = require(script.Parent.Compression);
-local HashLib = require(script.Parent.HashLib);
-local ExponentialBackoff = require(script.Parent.ExponentialBackoff);
-local Promise = require(script.Parent.Promise);
+local Leaderboard = script.Parent.Parent;
+local Util = require(Leaderboard.Util);
+local Promise = require(Leaderboard.Promise);
+local HashLib = require(Leaderboard.HashLib);
 
+-- Variables
+local ExponentialBackoff = Util.ExponentialBackoff;
+local Compression = Util.Compression;
+local SmartAssert = Util.SmartAssert;
+local FoundInTable = Util.FoundInTable;
+local GetDaysInMonth = Util.GetDaysInMonth;
+
+-- Constants
 local FALLBACK_EXPIRY_TIMES = {
 	["Hourly"] = 3600,
 	["Daily"] = 24 * 3600,
 	["Weekly"] = 7 * 24 * 3600,
-	["Monthly"] = 30 * 24 * 3600, -- Could be 31, but we'll use 30 for now
+	["Monthly"] = (GetDaysInMonth()) * 24 * 3600, -- Used to have it as 30, but that's not accurate, so we use GetDaysInMonth()
 }
 local DEBUG = false;
-local DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 
 --[=[
     @within MemoryShard
@@ -96,39 +103,6 @@ local function dPrint(...)
 	if (DEBUG) then
 		warn(`[Shards]`, ...);
 	end;
-end
-
-local function SmartAssert(condition: boolean, message: string)
-	if (not condition) then
-		error(message, 2);
-	end;
-end
-
-local function FoundInTable(tbl: {any}, value: any): (boolean | number, any)
-	local function search(t: {any}, val: any)
-		for index, v in t do
-			if (v == val) then
-				return index, v;
-			elseif (type(v) == "table") then
-				if search(v, val) then
-					return index, v;
-				end;
-			end;
-		end;
-		return false, nil;
-	end;
-	return search(tbl, value)
-end
-
-local function GetDaysInMonth(): number
-	local CurrentDate = DateTime.now():ToUniversalTime();
-	local Month, Year = CurrentDate.Month, CurrentDate.Year;
-	if (Month == 2) then -- This is for a leap year
-		if (Year % 4 == 0 and (Year % 100 ~= 0 or Year % 400 == 0)) then
-			return 29; -- Leap year month (29 days)
-		end;
-	end;
-	return DAYS_IN_MONTH[Month];
 end
 
 local function GetExpiry(leaderboardType: LeaderboardType): number | nil

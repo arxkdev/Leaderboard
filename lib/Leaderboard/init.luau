@@ -4,12 +4,16 @@
 local Players = game:GetService("Players");
 
 -- Requirements
-local Board = require(script.Board);
-local Promise = require(script.Promise);
+local Util = require(script.Util);
 local Signal = require(script.Signal);
+local Promise = require(script.Promise);
+local Board = require(script.Board);
+
+-- Variables
+local SmartAssert = Util.SmartAssert;
 
 -- Constants
-local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
+local MEMORY_STORE_SERVICE_MAX_EXPIRY = 24 * 60 * 60 * 45;
 local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime", "Rolling"};
 
 --[=[
@@ -159,12 +163,6 @@ local Leaderboards = {} :: {[string]: Leaderboard};
 ]=]
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
-
-local function SmartAssert(condition: boolean, message: string)
-	if (not condition) then
-		error(message, 2);
-	end;
-end
 
 local function IsValidLeaderboardType(leaderboardType: LeaderboardType): boolean
 	return table.find(BOARD_TYPES, leaderboardType) ~= nil;
