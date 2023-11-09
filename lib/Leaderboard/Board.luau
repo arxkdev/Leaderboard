@@ -11,6 +11,7 @@ local Players = game:GetService("Players");
 local Promise = require(script.Parent.Promise);
 local MemoryShard = require(script.Parent.MemoryShard);
 local Compression = require(script.Parent.Compression);
+local ExponentialBackoff = require(script.Parent.ExponentialBackoff);
 
 -- Constants
 local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
@@ -74,14 +75,14 @@ type MemoryShard = MemoryShard.MemoryShard;
 	@within Board
 	@interface Object
 	@field __index Object
-	@field Update (self: Board, userId: number, value: number | (number) -> (number)) -> boolean
+	@field Update (self: Board, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: Board) -> ()
 	@field new (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board
 ]=]
 type Object = {
 	__index: Object,
-	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> boolean,
+	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Board) -> (),
 	new: (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board,
@@ -104,7 +105,7 @@ local function dPrint(...)
 	end;
 end
 
-local function Map<T>(tbl: {T}, fn: (T, number) -> (any)): {any}
+local function Map<T>(tbl: {T}, fn: (T, number) -> (any)): {T}
     local t = {};
     for i, v in tbl do
         t[i] = fn(v, i);
@@ -182,6 +183,7 @@ end
 	@param serviceKey string
 	@param leaderboardType LeaderboardType
 	@param rollingExpiry number?
+	@return Board
 
 	Creates a new board within the Leaderboard.
 ]=]
@@ -222,6 +224,7 @@ end
 --[=[
 	@param amount number
 	@param sortDirection string?
+	@return Promise.TypedPromise<{TopData}>
 	@yields
 
 	Gets the top data for a specific board.
@@ -236,24 +239,25 @@ function Board:Get(amount, sortDirection)
 	local function RetrieveTopData()
 		if (self.__storeType == "MemoryStore") then
 			local Data = self.__store:Get(amount, sortDirection);
-			return Map(Data, function(v, rank)
-				return Transform(rank, v.key, v.value);
+			return Data:andThen(function(data)
+				return Map(data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 			end);
 		else
 			local Result = self.__store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
 			local Data = Result:GetCurrentPage() :: {any};
-			return Map(Data, function(v, rank)
-				return Transform(rank, v.key, v.value);
-			end);
+			return Map(Data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 		end;
 	end;
 
 	return Promise.try(RetrieveTopData)
 	:andThen(function(data)
-		dPrint(`Successfully retrieved top data for {self.__serviceKey}`);
-		return data
+		dPrint(`Successfully retrieved top data for {self.__serviceKey}`, data);
+		return data;
 	end)
-	:catch(warn)
+	:catch(function(Error)
+		warn(`Leaderboard had trouble getting top data with error: {Error}`);
+		return {};
+	end) :: Promise.TypedPromise<{TopData}>;
 end
 
 -- Updates the data for a specific board (either MemoryStore (Shards), or OrderedDataStore)
@@ -261,6 +265,7 @@ end
 	@param userId number
 	@param value number | (number) -> (number)
 	@yields
+	@return boolean
 
 	Updates the data for a specific board (either MemoryStore (Shards), or OrderedDataStore).
 ]=]
@@ -275,8 +280,8 @@ function Board:Update(userId, value)
 	end;
 
 	-- Using an actual DataStore, we need to set the data
-	local Success, Error = pcall(function()
-		self.__store:UpdateAsync(userId, function(oldValue)
+	return ExponentialBackoff(function()
+		return self.__store:UpdateAsync(userId, function(oldValue)
 			oldValue = oldValue and Compression.Decompress(oldValue) or 0;
 			local transformedValue = (type(value) == "function") and value(oldValue) or value;
 
@@ -291,14 +296,7 @@ function Board:Update(userId, value)
 			end;
 			return nil;
 		end);
-	end);
-	if (not Success) then
-		warn(`Leaderboard had trouble saving: {Error}`);
-		return false;
-	end;
-
-	dPrint(`Successfully updated data for ${userId} in {self.__serviceKey}`);
-	return true;
+	end, 5, 1):catch(warn);
 end
 
 -- Destroys the board

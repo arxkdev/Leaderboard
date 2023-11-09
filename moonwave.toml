@@ -23,17 +23,14 @@ includeReadme = true # Optional
 [[home.features]]
 title = "Simple"
 description = "Leaderboard is so simple, you could have a Daily, Weekly and All Time leaderboard setup in 5 lines of code."
-image = "/simple.png"
 
 [[home.features]]
 title = "Fast"
 description = "Leaderboard is fast, it uses the latest and greatest of Roblox's API to ensure that it's as fast as possible."
-image = "/hourglass.png"
 
 [[home.features]]
 title = "Lightweight"
 description = "Leaderboard is a lightweight performance friendly library that is designed to be as lightweight as possible."
-image = "/feather.png"
 
 [[home.features]]
 

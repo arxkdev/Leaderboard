@@ -3,6 +3,8 @@ local MemoryStoreService = game:GetService("MemoryStoreService");
 
 local Compression = require(script.Parent.Compression);
 local HashLib = require(script.Parent.HashLib);
+local ExponentialBackoff = require(script.Parent.ExponentialBackoff);
+local Promise = require(script.Parent.Promise);
 
 local FALLBACK_EXPIRY_TIMES = {
 	["Hourly"] = 3600,
@@ -62,16 +64,22 @@ export type TopData = {
 	@interface Object
 	@field __index Object
 	@field __getShardKey (self: MemoryShard, userId: number) -> (number)
-	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> boolean
-	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> {TopData}
+	@field __getAsync (self: MemoryShard, key: string) -> any
+	@field __setAsync (self: MemoryShard, key: string, value: any, expiry: number, sortKey: number) -> boolean
+	@field __updateAsync (self: MemoryShard, key: string, transformer: (any) -> (any), expiry: number) -> boolean
+	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
+	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: MemoryShard) -> ()
 	@field new (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?) -> MemoryShard
 ]=]
 type Object = {
 	__index: Object,
 	__getShardKey: (self: MemoryShard, userId: number) -> (number),
-	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> boolean,
-	Get: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
+	__getAsync: (self: MemoryShard, key: string) -> Promise.TypedPromise<any>,
+	__setAsync: (self: MemoryShard, key: string, value: any, expiry: number, sortKey: number) -> Promise.TypedPromise<boolean>,
+	__updateAsync: (self: MemoryShard, key: string, transformer: (any) -> (any), expiry: number) -> Promise.TypedPromise<boolean>,
+	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
+	Get: (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: MemoryShard) -> (),
 	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?) -> MemoryShard,
 }
@@ -214,6 +222,56 @@ function MemoryShard:__getShardKey(userId)
 	return ShardIndex;
 end
 
+--[=[
+	@param userId string
+	@private
+	@return Promise.TypedPromise<{TopData}>
+
+	Gets the value for a specific key from a specific shard
+]=]
+function MemoryShard:__getAsync(userId: number)
+	local ShardKey = self:__getShardKey(userId);
+	local Shard = self.__shards[ShardKey] or self.__shards[1];
+	return ExponentialBackoff(function()
+		return Shard:GetAsync(userId);
+	end, 5, 1):catch(warn);
+end
+
+--[=[
+	@param userId string
+	@param value any
+	@param expiry number
+	@param sortKey number
+	@private
+	@return ()
+
+	Destroys all the shards for this MemoryShard
+]=]
+function MemoryShard:__setAsync(userId: string, value: any, expiry: number, sortKey: number)
+	local ShardKey = self:__getShardKey(userId);
+	local Shard = self.__shards[ShardKey] or self.__shards[1];
+	return ExponentialBackoff(function()
+		return Shard:SetAsync(userId, value, expiry, sortKey);
+	end, 5, 1):catch(warn);
+end
+
+--[=[
+	@param userId string
+	@param transformer (any) -> (any)
+	@param expiry number
+	@private
+	@return ()
+
+	Updates the value for a specific key from a specific shard
+]=]
+function MemoryShard:__updateAsync(userId: string, transformer: (any) -> (any), expiry: number)
+	local ShardKey = self:__getShardKey(userId);
+	local Shard = self.__shards[ShardKey] or self.__shards[1];
+	return ExponentialBackoff(function()
+		return Shard:UpdateAsync(userId, transformer, expiry);
+	end, 5, 1):catch(warn);
+end
+
 -- Gets the top data from all the shards for this MemoryShard
 --[=[
 	@param topAmount number
@@ -230,58 +288,68 @@ function MemoryShard:Get(topAmount, sortDirection)
 	SmartAssert(typeof(sortDirection) == "string", "sortDirection must be a string");
 	local CombinedResults = {};
 
-	-- Go through the shards, extract the data, and combine it
-	for _, Shard in self.__shards do
-		local Success, Result = pcall(function()
-			local data = Shard:GetRangeAsync(
+	local function ProcessEntry(entry: {key: string, value: number})
+		local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
+		if (Found) then
+			local FoundValueHigherThanCurrent = (Found.value > entry.value);
+			if (not FoundValueHigherThanCurrent) then
+				-- The found value already there, is LOWER than this new one, update it
+				CombinedResults[IndexFound].value = entry.value;
+			end;
+		else
+			-- There is no found value, add it to the combined results
+			table.insert(CombinedResults, {
+				key = tonumber(entry.key),
+				value = entry.value
+			});
+		end;
+	end
+
+	local function ProcessShard(shard: MemoryStoreSortedMap)
+		return function()
+			local data = shard:GetRangeAsync(
 				Enum.SortDirection[sortDirection],
 				topAmount
-			);
+			)
 			if (self.__type == "Rolling") then
-				for _, entry in data do
+				for _, entry in ipairs(data) do
 					-- get rid of expiry and creation date padding, convert back to number
-					entry.value = tonumber(entry.value.value)
-				end
-			end
-			return data
-		end);
-
-		if (not Success) then
-			warn(Result);
-			continue; -- Skip this shard, there was a problem with it
-		end;
-
-		for _, entry in Result do
-			local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
-			if (Found) then
-				local FoundValueHigherThanCurrent = (Found.value > entry.value);
-				if (not FoundValueHigherThanCurrent) then
-					-- The found value already there, is LOWER than this new one, update it
-					CombinedResults[IndexFound].value = entry.value;
+					entry.value = tonumber(entry.value.value);
 				end;
-			else
-				-- There is no found value, add it to the combined results
-				table.insert(CombinedResults, {
-					key = tonumber(entry.key),
-					value = entry.value
-				});
 			end;
+			return data;
 		end;
+	end
+
+	-- Go through the shards, extract the data, and combine it
+	local Promises = {};
+	for _, Shard in self.__shards do
+		local ShardPromise = ExponentialBackoff(ProcessShard(Shard), 5, 1):andThen(function(Result)
+			for _, entry in ipairs(Result) do
+				ProcessEntry(entry);
+			end;
+		end):catch(warn);
+		table.insert(Promises, ShardPromise);
 	end;
 
 	-- Sort it
-	table.sort(CombinedResults, function(a, b)
-		return a.value > b.value;
-	end);
+	return Promise.all(Promises):andThen(function()
+		-- Sort the combined results after all promises have resolved
+		table.sort(CombinedResults, function(a, b)
+			return a.value > b.value;
+		end);
 
-	-- Take off excess
-	if (#CombinedResults > topAmount) then
-		for i = #CombinedResults, topAmount + 1, -1 do
-			table.remove(CombinedResults, i);
+		-- Trim the results if necessary
+		if (#CombinedResults > topAmount) then
+			for i = #CombinedResults, topAmount + 1, -1 do
+				table.remove(CombinedResults, i);
+			end;
 		end;
-	end;
 
-	return CombinedResults;
+		return CombinedResults;
+	end):catch(function(error)
+		warn("An error occurred while processing shards: " .. error);
+	end);
 end
 
 -- Updates the value for a specific user in a specific shard
@@ -300,15 +368,11 @@ function MemoryShard:Set(userId, value)
 	SmartAssert(typeof(value) == "function" or typeof(value) == "number", "transformer must be a function or a number");
 
 	-- Get the shard key, shard, leaderboard type, and user key
-	local ShardKey = self:__getShardKey(userId);
-	local Shard = self.__shards[ShardKey] or self.__shards[1];
 	local LeaderboardType = self.__type;
-	local Key = tostring(userId);
 
 	-- Rolling support
 	if (LeaderboardType == "Rolling") then
-		local Success, NewData = pcall(function()
-			local oldValue = Shard:GetAsync(Key);
+		return self:__getAsync(userId):andThen(function(oldValue)
 			local firstTime = oldValue == nil;
 			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value);
 			local transformedValue = (typeof(value) == "function" and value(oldValue) or value);
@@ -327,46 +391,28 @@ function MemoryShard:Set(userId, value)
 				__expiry = self.__fallbackExpiry
 			};
 			-- update the value with appropriate expiry time left
-			Shard:SetAsync(Key, newValue, newValue.__expiry - (os.time() - newValue.__created), newSortKey);
-			return compressedValue, newSortKey; -- share same format as UpdateAsync
+			self:__setAsync(userId, newValue, newValue.__expiry - (os.time() - newValue.__created), newSortKey):catch(warn);
+			return true;
 		end);
+	end;
 
-		if (not Success) then
-			warn(NewData);
-			return false;
+	-- Update the value
+	return self:__updateAsync(userId, function(oldValue)
+		oldValue = oldValue and Compression.Decompress(oldValue) or 0;
+		local transformedValue = (typeof(value) == "function") and value(oldValue) or value;
+
+		-- If their oldValue is greater than the new value, we don't want to update it
+		if (oldValue > transformedValue) then
+			return nil;
 		end;
 
-		return true;
-	end;
-
-	local Success, NewData = pcall(function()
-		return Shard:UpdateAsync(
-			Key,
-			function(oldValue)
-				oldValue = oldValue and Compression.Decompress(oldValue) or 0;
-				local transformedValue = (typeof(value) == "function") and value(oldValue) or value;
-
-				-- If their oldValue is greater than the new value, we don't want to update it
-				if (oldValue > transformedValue) then
-					return nil;
-				end;
-
-				local compressedValue = Compression.Compress(transformedValue);
-				local newSortKey = transformedValue;
-				if (compressedValue and newSortKey) then
-					return compressedValue, newSortKey;
-				end;
-				return nil;
-			end,
-			GetExpiry(LeaderboardType) or self.__fallbackExpiry
-		);
-	end);
-
-	if (not Success) then
-		warn(NewData);
-		return false;
-	end;
-	return true;
+		local compressedValue = Compression.Compress(transformedValue);
+		local newSortKey = transformedValue;
+		if (compressedValue and newSortKey) then
+			return compressedValue, newSortKey;
+		end;
+		return nil;
+	end, GetExpiry(LeaderboardType) or self.__fallbackExpiry):catch(warn);
 end
 
 -- Make indexing the wrong key throw an error

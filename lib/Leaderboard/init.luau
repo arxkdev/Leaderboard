@@ -1,5 +1,5 @@
 --[[
-	Arxk was here
+	Arxk @ 2023
 ]]
 local Players = game:GetService("Players");
 
@@ -262,15 +262,11 @@ end
 function Leaderboard:SaveValues()
 	for UserId, BoardType in self.__valueQueue do
 		for _, Data in BoardType do
-			local Success = Data.Board:Update(UserId, function(oldValue)
-				if (Data.Amount < oldValue) then
-					return oldValue;
-				end;
+			Data.Board:Update(UserId, function(oldValue)
 				return (oldValue + Data.Amount); -- Increment the value
-			end);
-			if (Success) then
+			end):andThen(function()
 				self.__valueQueue[UserId] = nil;
-			end;
+			end);
 		end;
 	end;
 end
@@ -326,7 +322,7 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 		end));
 	end;
 
-	return Promise.all(Promises);
+	return Promise.all(Promises) :: Promise.TypedPromise<{AllTopData}>;
 end
 
 -- Increments the queued value(s)
