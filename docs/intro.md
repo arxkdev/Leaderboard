@@ -3,7 +3,7 @@ sidebar_position: 1
 ---
 
 # About
-Leaderboard is an intuitive, open-source module designed to effortlessly establish and manage robust non-persistent & persistent leaderboards for your Roblox experiences.
+Leaderboard is an intuitive, open-source module designed to effortlessly establish and manage robust non-persistent & persistent global leaderboards for your Roblox experiences.
 
 ### What can I do with this?
 - Create leaderboards for your Roblox experiences
