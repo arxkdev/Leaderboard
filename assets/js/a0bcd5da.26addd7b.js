@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkdocs=self.webpackChunkdocs||[]).push([[609],{93532:e=>{e.exports=JSON.parse('{"functions":[],"properties":[],"types":[],"name":"Leaderboard","desc":"","realm":["Server"],"source":{"line":70,"path":"lib/Leaderboard/init.luau"}}')}}]);
