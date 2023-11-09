@@ -54,7 +54,7 @@ local function UpdateLeaderboards()
     end;
 
     -- Retrieve the data
-    MoneyLeaderboard:RetrieveEntries("All", RECORD_COUNT):andThen(function(data)
+    MoneyLeaderboard:GetRecords("All", RECORD_COUNT):andThen(function(data)
         -- This is where you would update the leaderboard GUI
         -- Returns us a table of all the boards that were updated
         for _, board in data do

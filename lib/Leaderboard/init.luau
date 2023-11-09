@@ -12,9 +12,59 @@ local Signal = require(script.Signal);
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 3888000; -- 45 days
 local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime", "Rolling"};
 
+--[=[
+	@within Leaderboard
+	@interface TopData
+	@field Rank number
+	@field UserId number
+	@field Value number
+	@field Username string
+	@field DisplayName string
+]=]
+export type TopData = {
+	Rank: number,
+	UserId: number,
+	Value: number,
+	Username: string,
+	DisplayName: string,
+}
+
+--[=[
+	@within Leaderboard
+	@interface AllTopData
+	@field Type LeaderboardType
+	@field Data {TopData}
+]=]
+type AllTopData = {
+	Type: LeaderboardType,
+	Data: {TopData},
+}
+
 -- Supports Daily, Weekly, Monthly and AllTime currently
+--[=[
+    @within Leaderboard
+    @type Leaderboard () -> Leaderboard
+]=]
 export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
+
+--[=[
+    @within Leaderboard
+    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling"
+]=]
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
+
+--[=[
+	@within Leaderboard
+	@interface LeaderboardArguments
+	@field Updated Signal<{AllTopData}>
+	@field BoardUpdated Signal<{Type: LeaderboardType, Data: {TopData}}>
+	@field __serviceKey string
+	@field __types {LeaderboardType}
+	@field __boards {LeaderboardType: Board}
+	@field __valueQueue ValueQueueType
+	@field __threads {thread}
+	@field __connections {RBXScriptConnection}
+]=]
 export type LeaderboardArguments = {
 	Updated: Signal.Signal<{AllTopData}>,
 	BoardUpdated: Signal.Signal<{Type: LeaderboardType, Data: {TopData}}>,
@@ -25,14 +75,14 @@ export type LeaderboardArguments = {
 	__threads: {thread},
 	__connections: {RBXScriptConnection},
 }
-export type TopData = {
-	Rank: number,
-	UserId: number,
-	Value: number,
-	Username: string,
-	DisplayName: string,
-}
 
+--[=[
+	@within Leaderboard
+	@interface Board
+	@field GetRecords (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
+	@field Update (self: Board, userId: number, value: number | (number) -> (number)) -> boolean
+	@field Destroy (self: Board) -> ()
+]=]
 type ValueQueueType = {
 	[number]: {
 		[LeaderboardType]: {
@@ -41,31 +91,68 @@ type ValueQueueType = {
 		},
 	},
 }
-type AllTopData = {
-	Type: LeaderboardType,
-	Data: {TopData},
-}
+
+--[=[
+	@within Leaderboard
+	@interface Object
+	@field IncrementValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, amount: number) -> ()
+	@field SetValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
+	@field UpdateStoreValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
+	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
+	@field SaveValues (self: Leaderboard) -> ()
+	@field Destroy (self: Leaderboard) -> ()
+	@field new (serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard
+]=]
 type Object = {
 	__index: Object,
 	IncrementValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, amount: number) -> (),
-	UpdateValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
+	SetValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
-	RetrieveEntries: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
-	UpdateBoardWithValues: (self: Leaderboard) -> (),
+	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
+	SaveValues: (self: Leaderboard) -> (),
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard,
 }
+
 type Board = Board.Board;
+
+--[=[
+	@within Leaderboard
+	@interface AutomationSettings
+	@field Automation boolean?
+	@field Interval number?
+	@field RecordCount number | {[string]: number}?
+]=]
 type AutomationSettings = {
 	Automation: boolean,
 	Interval: number,
 	RecordCount: number | {[string]: number},
 }
 
--- Start
 --[=[
-    @class Leaderboard
-    @server
+	@within Leaderboard
+	@readonly
+	@prop Updated Signal<{AllTopData}>
+
+	Fired when the leaderboard is updated.
+]=]
+--[=[
+	@within Leaderboard
+	@readonly
+	@prop BoardUpdated Signal<{Type: LeaderboardType, Data: {TopData}}>
+
+	Fired when a specific board is updated.
+]=]
+--[=[
+	@class Leaderboard
+
+	Leaderboard allows you to create a leaderboard that can be used to store and retrieve data for a specific service key.
+
+	For example:
+	```lua
+	local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard);
+	local MoneyLeaderboard = Leaderboard.new("MoneyKey1", {"Daily", "AllTime"};
+	```
 ]=]
 local Leaderboards = {} :: {[string]: Leaderboard};
 local Leaderboard: Object = {} :: Object;
@@ -81,6 +168,11 @@ local function IsValidLeaderboardType(leaderboardType: LeaderboardType): boolean
 	return table.find(BOARD_TYPES, leaderboardType) ~= nil;
 end
 
+--[=[
+	@return Leaderboard
+
+	Creates a new leaderboard.
+]=]
 function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?)
 	if (table.find(leaderboardTypes, "Rolling") and rollingExpiry ~= nil) then
 		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY, `Rolling expiry must be within 60 and {MEMORY_STORE_SERVICE_MAX_EXPIRY} seconds`);
@@ -129,10 +221,10 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 		local Thread = task.spawn(function()
 			while (true) do
 				-- Update the value from the queue
-				self:UpdateBoardWithValues();
+				self:SaveValues();
 
 				-- Get the top and update the signal
-				self:RetrieveEntries("All", automationSettings.RecordCount):andThen(function(boards)
+				self:GetRecords("All", automationSettings.RecordCount):andThen(function(boards)
 					self.Updated:Fire(boards);
 					for _, board in boards do
 						self.BoardUpdated:Fire(board);
@@ -156,7 +248,11 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 end
 
 -- Flushes the queue
-function Leaderboard:UpdateBoardWithValues()
+-- Should only be used every 90-120 seconds
+--[=[
+	Updates the actual store value(s) (should only be used every 90-120 seconds)
+]=]
+function Leaderboard:SaveValues()
 	for UserId, BoardType in self.__valueQueue do
 		for _, Data in BoardType do
 			local Success = Data.Board:Update(UserId, function(oldValue)
@@ -173,7 +269,16 @@ function Leaderboard:UpdateBoardWithValues()
 end
 
 -- Gets the data for all the top boards (should only be used every 90-120 seconds)
-function Leaderboard:RetrieveEntries(boardTypes, optionalRange, sortDirection)
+--[=[
+	@param boardTypes {LeaderboardType} | "All"
+	@param optionalRange {[string]: number} | number
+	@param sortDirection string
+
+	@return Promise<{AllTopData}>
+
+	Gets the data for all the top boards (should only be used every 90-120 seconds)
+]=]
+function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
 
@@ -218,6 +323,14 @@ end
 
 -- Increments the queued value(s)
 -- either Leaderboard:IncrementValues(nil, userId, amount) or Leaderboard:IncrementValues({"Daily", "Weekly"}, userId, amount
+--[=[
+	Increments the queued value(s)
+	@param boardTypes {LeaderboardType} | "All"
+	@param userId number
+	@param amount number
+
+	Increments the queued value(s)
+]=]
 function Leaderboard:IncrementValues(boardTypes, userId, amount)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(amount) == "number", "Amount must be a number");
@@ -248,8 +361,16 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 end
 
 -- Updates the queued value(s)
--- either Leaderboard:UpdateValues("All", userId, value) or Leaderboard:UpdateValues({"Daily", "Weekly"}, userId, value
-function Leaderboard:UpdateValues(boardTypes, userId, value)
+-- either Leaderboard:SetValues("All", userId, value) or Leaderboard:SetValues({"Daily", "Weekly"}, userId, value
+--[=[
+	Updates the queued value(s)
+	@param boardTypes {LeaderboardType} | "All"
+	@param userId number
+	@param value number | (number) -> (number)
+
+	Updates the queued value(s)
+]=]
+function Leaderboard:SetValues(boardTypes, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
 	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
@@ -280,6 +401,14 @@ end
 
 -- Updates the actual store value(s) (should only be used every 90-120 seconds)
 -- either Leaderboard:UpdateStoreValues(nil, userId, value) or Leaderboard:UpdateStoreValues({"Daily", "Weekly"}, userId, value
+--[=[
+	Updates the actual store value(s) (should only be used every 90-120 seconds)
+	@param boardTypes {LeaderboardType} | "All"
+	@param userId number
+	@param value number | (number) -> (number)
+
+	Updates the actual store value(s) (should only be used every 90-120 seconds)
+]=]
 function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
@@ -301,9 +430,12 @@ function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 end
 
 -- Destroys the leaderboard
+--[=[
+	Destroys the leaderboard
+]=]
 function Leaderboard:Destroy()
 	-- Update the value from the queue
-	self:UpdateBoardWithValues();
+	self:SaveValues();
 
 	-- Destroy all the boards
 	for _, board in self.__boards do
@@ -350,8 +482,8 @@ setmetatable(Leaderboard, {
 return table.freeze({
 	new = Leaderboard.new,
 	IncrementValues = Leaderboard.IncrementValues,
-	UpdateValues = Leaderboard.UpdateValues,
+	SetValues = Leaderboard.SetValues,
 	UpdateStoreValues = Leaderboard.UpdateStoreValues,
-	RetrieveEntries = Leaderboard.RetrieveEntries,
+	GetRecords = Leaderboard.GetRecords,
 	Destroy = Leaderboard.Destroy,
 })
