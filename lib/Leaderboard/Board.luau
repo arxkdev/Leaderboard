@@ -232,7 +232,7 @@ function Board:Get(amount, sortDirection)
 
 	local function RetrieveTopData()
 		if (self.__storeType == "MemoryStore") then
-			local Data = self.__store:GetTopShardData(amount, sortDirection);
+			local Data = self.__store:Get(amount, sortDirection);
 			return Map(Data, function(v, rank)
 				return Transform(rank, v.key, v.value);
 			end);
@@ -267,7 +267,7 @@ function Board:Update(userId, value)
 	-- If we are using a MemoryStore, we can just update the data
 	if (self.__storeType == "MemoryStore") then
 		dPrint(`Successfully updated data for ${userId} in {self.__serviceKey}`);
-		return self.__store:UpdateShardValue(userId, value);
+		return self.__store:Set(userId, value);
 	end;
 
 	-- Using an actual DataStore, we need to set the data

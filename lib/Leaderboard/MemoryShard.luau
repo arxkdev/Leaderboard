@@ -13,14 +13,42 @@ local FALLBACK_EXPIRY_TIMES = {
 local DEBUG = false;
 local DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 
+--[=[
+    @within MemoryShard
+    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling"
+]=]
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime" | "Rolling";
-export type MemoryShard = typeof(setmetatable({} :: LeaderboardArguments, {} :: Object));
-export type LeaderboardArguments = {
+
+--[=[
+    @within MemoryShard
+    @type MemoryShard () -> MemoryShard
+]=]
+export type MemoryShard = typeof(setmetatable({} :: MemoryShardArguments, {} :: Object));
+
+--[=[
+	@within MemoryShard
+	@interface MemoryShardArguments
+	@field __type LeaderboardType
+	@field __fallbackExpiry number
+	@field __shards {MemoryStoreSortedMap}
+	@field __shardCount number
+]=]
+export type MemoryShardArguments = {
 	__type: LeaderboardType,
 	__fallbackExpiry: number,
 	__shards: {MemoryStoreSortedMap},
 	__shardCount: number,
 }
+
+--[=[
+	@within MemoryShard
+	@interface TopData
+	@field Rank number
+	@field UserId number
+	@field Value number
+	@field Username string
+	@field DisplayName string
+]=]
 export type TopData = {
 	Rank: number,
 	UserId: number,
@@ -29,18 +57,29 @@ export type TopData = {
 	DisplayName: string,
 }
 
+--[=[
+	@within MemoryShard
+	@interface Object
+	@field __index Object
+	@field __getShardKey (self: MemoryShard, userId: number) -> (number)
+	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> boolean
+	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> {TopData}
+	@field Destroy (self: MemoryShard) -> ()
+	@field new (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard
+]=]
 type Object = {
 	__index: Object,
 	__getShardKey: (self: MemoryShard, userId: number) -> (number),
-	UpdateShardValue: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> boolean,
-	GetTopShardData: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
-	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard,
+	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> boolean,
+	Get: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
 	Destroy: (self: MemoryShard) -> (),
+	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard,
 }
 
 --[=[
-    @class MemoryShard
-    @server
+	@class MemoryShard
+
+	A memory shard is a way to split up the leaderboard into multiple shards, each shard is a MemoryStoreSortedMap
 ]=]
 local MemoryShard: Object = {} :: Object;
 MemoryShard.__index = MemoryShard;
@@ -130,8 +169,16 @@ local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	return nil;
 end
 
+--[=[
+	@param leaderboardType LeaderboardType
+	@param serviceKey string
+	@param shardCount number
+	@param rollingExpiry number?
+
+	Creates a new MemoryShard
+]=]
 function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?)
-	local self = setmetatable({} :: LeaderboardArguments, MemoryShard);
+	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
 	self.__shards = {};
 
 	for i = 1, shardCount do
@@ -147,6 +194,13 @@ function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, s
 end
 
 -- Gets the Shard Key using prefixing and modulo
+--[=[
+	@param userId number
+	@private
+	@return number
+
+	Gets the Shard Key using prefixing and modulo
+]=]
 function MemoryShard:__getShardKey(userId)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
@@ -161,7 +215,14 @@ function MemoryShard:__getShardKey(userId)
 end
 
 -- Gets the top data from all the shards for this MemoryShard
-function MemoryShard:GetTopShardData(topAmount, sortDirection)
+--[=[
+	@param topAmount number
+	@param sortDirection string
+	@return {TopData}
+
+	Gets the top data from all the shards for this MemoryShard
+]=]
+function MemoryShard:Get(topAmount, sortDirection)
 	SmartAssert(topAmount, "topAmount must be provided");
 	SmartAssert(sortDirection, "sortDirection must be provided");
 	SmartAssert(typeof(topAmount) == "number", "topAmount must be a number");
@@ -223,7 +284,14 @@ function MemoryShard:GetTopShardData(topAmount, sortDirection)
 end
 
 -- Updates the value for a specific user in a specific shard
-function MemoryShard:UpdateShardValue(userId, value)
+--[=[
+	@param userId number
+	@param value number | (number) -> (number)
+	@return boolean
+
+	Updates the value for a specific user in a specific shard
+]=]
+function MemoryShard:Set(userId, value)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(value, "transformer must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
