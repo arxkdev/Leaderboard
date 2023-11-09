@@ -48,10 +48,10 @@ type AllTopData = {
 type Object = {
 	__index: Object,
 	IncrementValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, amount: number) -> (),
-	UpdateValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
+	SetValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
-	RetrieveEntries: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
-	UpdateBoardWithValues: (self: Leaderboard) -> (),
+	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
+	SaveValues: (self: Leaderboard) -> (),
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard,
 }
@@ -128,11 +128,11 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	if (automationSettings and automationSettings.Automation) then
 		local Thread = task.spawn(function()
 			while (true) do
-				-- Update the value from the queue
-				self:UpdateBoardWithValues();
+				-- Save the value from the queue
+				self:SaveValues();
 
 				-- Get the top and update the signal
-				self:RetrieveEntries("All", automationSettings.RecordCount):andThen(function(boards)
+				self:GetRecords("All", automationSettings.RecordCount):andThen(function(boards)
 					self.Updated:Fire(boards);
 					for _, board in boards do
 						self.BoardUpdated:Fire(board);
@@ -156,7 +156,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 end
 
 -- Flushes the queue
-function Leaderboard:UpdateBoardWithValues()
+function Leaderboard:SaveValues()
 	for UserId, BoardType in self.__valueQueue do
 		for _, Data in BoardType do
 			local Success = Data.Board:Update(UserId, function(oldValue)
@@ -173,7 +173,7 @@ function Leaderboard:UpdateBoardWithValues()
 end
 
 -- Gets the data for all the top boards (should only be used every 90-120 seconds)
-function Leaderboard:RetrieveEntries(boardTypes, optionalRange, sortDirection)
+function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
 
@@ -248,8 +248,8 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 end
 
 -- Updates the queued value(s)
--- either Leaderboard:UpdateValues("All", userId, value) or Leaderboard:UpdateValues({"Daily", "Weekly"}, userId, value
-function Leaderboard:UpdateValues(boardTypes, userId, value)
+-- either Leaderboard:SetValues("All", userId, value) or Leaderboard:SetValues({"Daily", "Weekly"}, userId, value
+function Leaderboard:SetValues(boardTypes, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
 	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
@@ -303,7 +303,7 @@ end
 -- Destroys the leaderboard
 function Leaderboard:Destroy()
 	-- Update the value from the queue
-	self:UpdateBoardWithValues();
+	self:SaveValues();
 
 	-- Destroy all the boards
 	for _, board in self.__boards do
@@ -350,8 +350,8 @@ setmetatable(Leaderboard, {
 return table.freeze({
 	new = Leaderboard.new,
 	IncrementValues = Leaderboard.IncrementValues,
-	UpdateValues = Leaderboard.UpdateValues,
+	SetValues = Leaderboard.SetValues,
 	UpdateStoreValues = Leaderboard.UpdateStoreValues,
-	RetrieveEntries = Leaderboard.RetrieveEntries,
+	GetRecords = Leaderboard.GetRecords,
 	Destroy = Leaderboard.Destroy,
 })
