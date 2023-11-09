@@ -22,8 +22,27 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 local DEBUG = false;
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
+--[=[
+    @within Board
+    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling"
+]=]
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
+
+--[=[
+    @within Board
+    @type Board () -> Board
+]=]
 export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
+
+--[=[
+	@within Board
+	@interface BoardArguments
+	@field __serviceKey string
+	@field __type LeaderboardType
+	@field __storeUsing string
+	@field __store MemoryStoreSortedMap | OrderedDataStore | MemoryShard
+	@field __threads {thread}
+]=]
 export type BoardArguments = {
 	__serviceKey: string,
 	__type: LeaderboardType,
@@ -31,6 +50,16 @@ export type BoardArguments = {
 	__store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
 	__threads: {thread},
 }
+
+--[=[
+	@within Board
+	@interface TopData
+	@field Rank number
+	@field UserId number
+	@field Value number
+	@field Username string
+	@field DisplayName string
+]=]
 export type TopData = {
 	Rank: number,
 	UserId: number,
@@ -40,10 +69,20 @@ export type TopData = {
 }
 
 type MemoryShard = MemoryShard.MemoryShard;
+
+--[=[
+	@within Board
+	@interface Object
+	@field __index Object
+	@field Update (self: Board, userId: number, value: number | (number) -> (number)) -> boolean
+	@field Get (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
+	@field Destroy (self: Board) -> ()
+	@field new (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board
+]=]
 type Object = {
 	__index: Object,
 	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> boolean,
-	GetTopData: (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
+	Get: (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Board) -> (),
 	new: (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board,
 }
@@ -52,8 +91,9 @@ type Object = {
 local UserIdsCache = {}; -- To assign userids {username, displayName}
 
 --[=[
-    @class Board
-    @server
+	@class Board
+
+	This class is used to create a new leaderboard board.
 ]=]
 local Board: Object = {} :: Object;
 Board.__index = Board;
@@ -136,6 +176,13 @@ local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardTy
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
 end
 
+--[=[
+	@param serviceKey string
+	@param leaderboardType LeaderboardType
+	@param rollingExpiry number?
+
+	Creates a new board within the Leaderboard.
+]=]
 function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?)
 	local self = setmetatable({} :: BoardArguments, Board);
 
@@ -170,7 +217,13 @@ function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rolling
 end
 
 -- Gets the top data for a specific board
-function Board:GetTopData(amount, sortDirection)
+--[=[
+	@param amount number
+	@param sortDirection string?
+
+	Gets the top data for a specific board.
+]=]
+function Board:Get(amount, sortDirection)
 	SmartAssert(type(amount) == "number", "Amount must be a number");
 	SmartAssert(amount <= 100, "You can only get the top 100.");
 	SmartAssert(amount > 0, "Amount must be greater than 0");
@@ -201,6 +254,12 @@ function Board:GetTopData(amount, sortDirection)
 end
 
 -- Updates the data for a specific board (either MemoryStore (Shards), or OrderedDataStore)
+--[=[
+	@param userId number
+	@param value number | (number) -> (number)
+
+	Updates the data for a specific board (either MemoryStore (Shards), or OrderedDataStore).
+]=]
 function Board:Update(userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Transformer must be a function or a number");
@@ -239,6 +298,9 @@ function Board:Update(userId, value)
 end
 
 -- Destroys the board
+--[=[
+	Destroys the board.
+]=]
 function Board:Destroy()
 	-- Destroy the threads
 	for _, thread in self.__threads do
@@ -260,7 +322,7 @@ setmetatable(Board, {
 
 return table.freeze({
 	new = Board.new,
-	GetTopData = Board.GetTopData,
+	Get = Board.Get,
 	Update = Board.Update,
 	Destroy = Board.Destroy,
 })
