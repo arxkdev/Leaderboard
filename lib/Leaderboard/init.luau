@@ -177,7 +177,7 @@ end
 	@param rollingExpiry number?
 	@return Leaderboard
 
-	Creates a new leaderboard.
+	Constructs a new leaderboard.
 ]=]
 function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?)
 	if (table.find(leaderboardTypes, "Rolling") and rollingExpiry ~= nil) then
