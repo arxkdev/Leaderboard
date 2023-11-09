@@ -244,7 +244,7 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 end
 
 -- Updates the queued value(s)
--- either Leaderboard:UpdateValues(nil, userId, value) or Leaderboard:UpdateValues({"Daily", "Weekly"}, userId, value
+-- either Leaderboard:UpdateValues("All", userId, value) or Leaderboard:UpdateValues({"Daily", "Weekly"}, userId, value
 function Leaderboard:UpdateValues(boardTypes, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
@@ -327,7 +327,9 @@ end
 -- Bind to close, destroy all the leaderboards
 game:BindToClose(function()
 	for _, leaderboard in Leaderboards do
-		leaderboard:Destroy();
+		task.spawn(function()
+			leaderboard:Destroy();
+		end)
 	end;
 end);
 
