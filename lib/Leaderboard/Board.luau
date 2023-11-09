@@ -220,6 +220,7 @@ end
 --[=[
 	@param amount number
 	@param sortDirection string?
+	@yields
 
 	Gets the top data for a specific board.
 ]=]
@@ -257,6 +258,7 @@ end
 --[=[
 	@param userId number
 	@param value number | (number) -> (number)
+	@yields
 
 	Updates the data for a specific board (either MemoryStore (Shards), or OrderedDataStore).
 ]=]

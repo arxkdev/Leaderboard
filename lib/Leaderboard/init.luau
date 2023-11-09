@@ -256,6 +256,7 @@ end
 -- Flushes the queue
 -- Should only be used every 90-120 seconds
 --[=[
+	@yields
 	Updates the actual store value(s) (should only be used every 90-120 seconds)
 ]=]
 function Leaderboard:SaveValues()
@@ -279,6 +280,7 @@ end
 	@param boardTypes {LeaderboardType} | "All"
 	@param optionalRange {[string]: number} | number
 	@param sortDirection string
+	@yields
 
 	@return Promise<{AllTopData}>
 
@@ -412,6 +414,7 @@ end
 	@param boardTypes {LeaderboardType} | "All"
 	@param userId number
 	@param value number | (number) -> (number)
+	@yields
 
 	Updates the actual store value(s) (should only be used every 90-120 seconds)
 ]=]

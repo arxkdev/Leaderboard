@@ -219,6 +219,7 @@ end
 	@param topAmount number
 	@param sortDirection string
 	@return {TopData}
+	@yields
 
 	Gets the top data from all the shards for this MemoryShard
 ]=]
@@ -288,6 +289,7 @@ end
 	@param userId number
 	@param value number | (number) -> (number)
 	@return boolean
+	@yields
 
 	Updates the value for a specific user in a specific shard
 ]=]

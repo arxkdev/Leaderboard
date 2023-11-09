@@ -7,7 +7,7 @@ changelog = true
 [docusaurus]
 onBrokenLinks = "throw"
 onBrokenMarkdownLinks = "warn"
-favicon = "/favicon.ico"
+favicon = "/favicon.png"
 
 # From git:
 organizationName = "arxkdev"
