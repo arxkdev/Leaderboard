@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkdocs=self.webpackChunkdocs||[]).push([[939],{24917:e=>{e.exports=JSON.parse('{"functions":[],"properties":[],"types":[],"name":"MemoryShard","desc":"","realm":["Server"],"source":{"line":45,"path":"lib/Leaderboard/MemoryShard.luau"}}')}}]);
