@@ -118,8 +118,10 @@ local function SmartAssert(condition: boolean, message: string)
 	end;
 end
 
-local function GetUserInfosFromId(userId: number): (string, string)
-	userId = tonumber(userId);
+local function GetUserInfosFromId(userId: number | string): (string, string)
+	if (typeof(userId) == "string") then
+		userId = tonumber(userId);
+	end;
 
 	-- First, check if the cache contains the name
 	if (UserIdsCache[userId]) then

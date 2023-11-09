@@ -65,7 +65,7 @@ export type TopData = {
 	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> boolean
 	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> {TopData}
 	@field Destroy (self: MemoryShard) -> ()
-	@field new (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard
+	@field new (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?) -> MemoryShard
 ]=]
 type Object = {
 	__index: Object,
@@ -73,7 +73,7 @@ type Object = {
 	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> boolean,
 	Get: (self: MemoryShard, amount: number, sortDirection: string) -> {TopData},
 	Destroy: (self: MemoryShard) -> (),
-	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, debug: boolean) -> MemoryShard,
+	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?) -> MemoryShard,
 }
 
 --[=[
@@ -180,16 +180,16 @@ end
 function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?)
 	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
 	self.__shards = {};
+	self.__shardCount = shardCount;
+	self.__type = leaderboardType;
+	self.__fallbackExpiry = (leaderboardType == "Rolling" and rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self.__type];
 
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
 		self.__shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
-		dPrint(`Cerated MemoryStoreSortedMap for _Shared{tostring(i)}`);
+		dPrint(`Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
 	end;
 
-	self.__shardCount = shardCount;
-	self.__type = leaderboardType;
-	self.__fallbackExpiry = (leaderboardType == "Rolling" and rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self.__type];
 	return self;
 end
 
