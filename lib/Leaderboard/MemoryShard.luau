@@ -38,6 +38,10 @@ type Object = {
 	Destroy: (self: MemoryShard) -> (),
 }
 
+--[=[
+    @class MemoryShard
+    @server
+]=]
 local MemoryShard: Object = {} :: Object;
 MemoryShard.__index = MemoryShard;
 

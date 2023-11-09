@@ -63,6 +63,10 @@ type AutomationSettings = {
 }
 
 -- Start
+--[=[
+    @class Leaderboard
+    @server
+]=]
 local Leaderboards = {} :: {[string]: Leaderboard};
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;

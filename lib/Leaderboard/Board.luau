@@ -51,6 +51,10 @@ type Object = {
 -- Start
 local UserIdsCache = {}; -- To assign userids {username, displayName}
 
+--[=[
+    @class Board
+    @server
+]=]
 local Board: Object = {} :: Object;
 Board.__index = Board;
 
@@ -187,7 +191,6 @@ function Board:GetTopData(amount, sortDirection)
 			end);
 		end;
 	end;
-
 
 	return Promise.try(RetrieveTopData)
 	:andThen(function(data)

@@ -1,0 +1,44 @@
+title = "Leaderboard"  # From Git
+gitRepoUrl = "https://github.com/arxkdev/Leaderboard" # From Git
+
+gitSourceBranch = "main"
+changelog = true
+
+[home]
+enabled = true
+includeReadme = true # Optional
+
+[[home.features]]
+title = "Simple"
+description = "Leaderboard is a simple library that allows you to create leaderboards with ease."
+
+[[home.features]]
+title = "Quick"
+description = "Leaderboard is a quick library that doesn't hesitiate"
+
+[[home.features]]
+title = "Lightweight"
+description = "Leaderboard is a lightweight performance friendly library that doesn't use much memory."
+
+[[classOrder]]
+section = "Leaderboard"
+classes = ["Leaderboard", "Board", "MemoryShard"]
+
+[[classOrder]]
+section = "Util"
+classes = ["Promise", "Signal", "Error"]
+
+[docusaurus]
+onBrokenLinks = "throw"
+onBrokenMarkdownLinks = "warn"
+
+# From git:
+organizationName = "arxkdev"
+projectName = "Leaderboard"
+url = "https://arxkdev.github.io"
+baseUrl = "/Leaderboard/"
+tagline = "Simple. Quick. Lightweight leaderboard library for Roblox."
+
+[footer]
+style = "dark"
+copyright = "Copyright © 2023 Arxk. Built with Moonwave and Docusaurus"
