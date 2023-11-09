@@ -173,7 +173,7 @@ function Board:GetTopData(amount, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
 
-	local function PromiseRetrieveTopData()
+	local function RetrieveTopData()
 		if (self.__storeType == "MemoryStore") then
 			local Data = self.__store:GetTopShardData(amount, sortDirection);
 			return Map(Data, function(v, rank)
@@ -188,17 +188,13 @@ function Board:GetTopData(amount, sortDirection)
 		end;
 	end;
 
-	return Promise.new(function(resolve, reject)
-		local Success, Data = pcall(PromiseRetrieveTopData);
 
-		if (Success) then
-			dPrint(`Successfully retrieved top data for {self.__serviceKey}`);
-			resolve(Data);
-		else
-			warn(Success, Data);
-			reject(Data);
-		end;
-	end);
+	return Promise.try(RetrieveTopData)
+	:andThen(function(data)
+		dPrint(`Successfully retrieved top data for {self.__serviceKey}`);
+		return data
+	end)
+	:catch(warn)
 end
 
 -- Updates the data for a specific board (either MemoryStore (Shards), or OrderedDataStore)

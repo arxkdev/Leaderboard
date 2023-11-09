@@ -198,9 +198,7 @@ function Leaderboard:RetrieveEntries(boardTypes, optionalRange, sortDirection)
 	local Promises = {};
 	for _, v in boardTypes do
 		local BoardClass = self.__boards[v] :: Board;
-		if (not BoardClass) then
-			error(`Board type {v} does not exist`, 2);
-		end;
+		SmartAssert(BoardClass ~= nil, `Board type {v} does not exist`)
 
 		local Amount = optionalRange and (type(optionalRange) == "number" and optionalRange or optionalRange[v]) or 100;
 		table.insert(Promises, BoardClass:GetTopData(Amount, sortDirection):andThen(function(data)
@@ -246,7 +244,7 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 end
 
 -- Updates the queued value(s)
--- either Leaderboard:UpdateValues(nil, userId, value) or Leaderboard:UpdateValues({"Daily", "Weekly"}, userId, value
+-- either Leaderboard:UpdateValues("All", userId, value) or Leaderboard:UpdateValues({"Daily", "Weekly"}, userId, value
 function Leaderboard:UpdateValues(boardTypes, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
@@ -329,7 +327,9 @@ end
 -- Bind to close, destroy all the leaderboards
 game:BindToClose(function()
 	for _, leaderboard in Leaderboards do
-		leaderboard:Destroy();
+		task.spawn(function()
+			leaderboard:Destroy();
+		end)
 	end;
 end);
 
