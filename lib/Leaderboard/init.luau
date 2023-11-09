@@ -50,8 +50,7 @@ type Object = {
 	IncrementValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, amount: number) -> (),
 	UpdateValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
-	GetAllTop: (self: Leaderboard, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
-	GetSpecifcTop: (self: Leaderboard, boardType: LeaderboardType, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
+	RetrieveEntries: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	UpdateBoardWithValues: (self: Leaderboard) -> (),
 	Destroy: (self: Leaderboard) -> (),
 	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard,
@@ -129,7 +128,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 				self:UpdateBoardWithValues();
 
 				-- Get the top and update the signal
-				self:GetAllTop(automationSettings.RecordCount):andThen(function(boards)
+				self:RetrieveEntries("All", automationSettings.RecordCount):andThen(function(boards)
 					self.Updated:Fire(boards);
 					for _, board in boards do
 						self.BoardUpdated:Fire(board);
@@ -169,24 +168,15 @@ function Leaderboard:UpdateBoardWithValues()
 	end;
 end
 
--- Gets the data for a specific board (should only be used every 90-120 seconds)
-function Leaderboard:GetSpecifcTop(boardType, amount, sortDirection)
-	SmartAssert(type(amount) == "number", "Amount must be a number");
-	SmartAssert(amount <= 100, "You can only get the top 100.");
-	SmartAssert(amount > 0, "Amount must be greater than 0");
-	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
-	sortDirection = sortDirection or "Descending";
-
-	local BoardClass = self.__boards[boardType] :: Board;
-	SmartAssert(BoardClass ~= nil, `Board type ${boardType} does not exist`)
-
-	return BoardClass:GetTopData(amount, sortDirection);
-end
-
 -- Gets the data for all the top boards (should only be used every 90-120 seconds)
-function Leaderboard:GetAllTop(optionalRange, sortDirection)
+function Leaderboard:RetrieveEntries(boardTypes, optionalRange, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
+
+	-- If boardTypes is all, get all the boards
+	if (boardTypes == "All") then
+		boardTypes = self.__types;
+	end;
 
 	-- Check if the optional range is valid
 	if (optionalRange) then
@@ -206,7 +196,7 @@ function Leaderboard:GetAllTop(optionalRange, sortDirection)
 
 	-- Get all the data
 	local Promises = {};
-	for _, v in self.__types do
+	for _, v in boardTypes do
 		local BoardClass = self.__boards[v] :: Board;
 		SmartAssert(BoardClass ~= nil, `Board type {v} does not exist`)
 
@@ -356,7 +346,6 @@ return table.freeze({
 	IncrementValues = Leaderboard.IncrementValues,
 	UpdateValues = Leaderboard.UpdateValues,
 	UpdateStoreValues = Leaderboard.UpdateStoreValues,
-	GetAllTop = Leaderboard.GetAllTop,
-	GetSpecifcTop = Leaderboard.GetSpecifcTop,
+	RetrieveEntries = Leaderboard.RetrieveEntries,
 	Destroy = Leaderboard.Destroy,
 })
