@@ -178,9 +178,7 @@ function Leaderboard:GetSpecifcTop(boardType, amount, sortDirection)
 	sortDirection = sortDirection or "Descending";
 
 	local BoardClass = self.__boards[boardType] :: Board;
-	if (not BoardClass) then
-		error(`Board type ${boardType} does not exist`, 2);
-	end;
+	SmartAssert(BoardClass ~= nil, `Board type ${boardType} does not exist`)
 
 	return BoardClass:GetTopData(amount, sortDirection);
 end
@@ -210,9 +208,7 @@ function Leaderboard:GetAllTop(optionalRange, sortDirection)
 	local Promises = {};
 	for _, v in self.__types do
 		local BoardClass = self.__boards[v] :: Board;
-		if (not BoardClass) then
-			error(`Board type {v} does not exist`, 2);
-		end;
+		SmartAssert(BoardClass ~= nil, `Board type {v} does not exist`)
 
 		local Amount = optionalRange and (type(optionalRange) == "number" and optionalRange or optionalRange[v]) or 100;
 		table.insert(Promises, BoardClass:GetTopData(Amount, sortDirection):andThen(function(data)
