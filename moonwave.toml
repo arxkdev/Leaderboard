@@ -14,7 +14,7 @@ organizationName = "arxkdev"
 projectName = "Leaderboard"
 url = "https://arxkdev.github.io"
 baseUrl = "/Leaderboard/"
-tagline = "Simple. Quick. Lightweight leaderboard library for Roblox."
+tagline = "Global leaderboards with 5 lines of code."
 
 [home]
 enabled = true
@@ -22,15 +22,20 @@ includeReadme = true # Optional
 
 [[home.features]]
 title = "Simple"
-description = "Leaderboard is a simple library that allows you to create leaderboards with ease."
+description = "Leaderboard is so simple, you could have a Daily, Weekly and All Time leaderboard setup in 5 lines of code."
+image = "/simple.png"
 
 [[home.features]]
-title = "Quick"
-description = "Leaderboard is a quick library that doesn't hesitiate"
+title = "Fast"
+description = "Leaderboard is fast, it uses the latest and greatest of Roblox's API to ensure that it's as fast as possible."
+image = "/hourglass.png"
 
 [[home.features]]
 title = "Lightweight"
-description = "Leaderboard is a lightweight performance friendly library that doesn't use much memory."
+description = "Leaderboard is a lightweight performance friendly library that is designed to be as lightweight as possible."
+image = "/feather.png"
+
+[[home.features]]
 
 [[classOrder]]
 section = "Leaderboard"
