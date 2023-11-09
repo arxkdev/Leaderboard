@@ -9,7 +9,7 @@ sidebar_position: 3
 local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard)
 
 local Key = 1 -- The key for the leaderboard (change to reset)
-local LeaderboardTypes = {"Daily", "Weekly", "Monthly", "AllTime"}
+local LeaderboardTypes = {"Daily", "Weekly", "Monthly", "AllTime"})
 local MoneyLeaderboard = Leaderboard.new(`Money_{Key}`, LeaderboardTypes, {
     -- Settings
     Automation = true,

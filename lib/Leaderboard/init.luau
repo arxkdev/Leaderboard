@@ -143,6 +143,9 @@ type AutomationSettings = {
 
 	Fired when a specific board is updated.
 ]=]
+
+local Leaderboards = {} :: {[string]: Leaderboard};
+
 --[=[
 	@class Leaderboard
 
@@ -154,7 +157,6 @@ type AutomationSettings = {
 	local MoneyLeaderboard = Leaderboard.new("MoneyKey1", {"Daily", "AllTime"};
 	```
 ]=]
-local Leaderboards = {} :: {[string]: Leaderboard};
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 
@@ -169,6 +171,10 @@ local function IsValidLeaderboardType(leaderboardType: LeaderboardType): boolean
 end
 
 --[=[
+	@param serviceKey string
+	@param leaderboardTypes {LeaderboardType}
+	@param automationSettings AutomationSettings?
+	@param rollingExpiry number?
 	@return Leaderboard
 
 	Creates a new leaderboard.
@@ -310,7 +316,7 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 		SmartAssert(BoardClass ~= nil, `Board type {v} does not exist`)
 
 		local Amount = optionalRange and (type(optionalRange) == "number" and optionalRange or optionalRange[v]) or 100;
-		table.insert(Promises, BoardClass:GetTopData(Amount, sortDirection):andThen(function(data)
+		table.insert(Promises, BoardClass:Get(Amount, sortDirection):andThen(function(data)
 			return {
 				Type = v,
 				Data = data,
