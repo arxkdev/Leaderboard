@@ -287,7 +287,7 @@ function Board:Update(userId, value)
 			end;
 			return nil;
 		end);
-	end, 5, 1):catch(warn);
+	end, 10, 1):catch(warn);
 end
 
 -- Destroys the board

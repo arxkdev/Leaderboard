@@ -33,4 +33,24 @@ local function RetryWithBackoff<T>(func: () -> T, maxRetries: number, baseBackof
     end);
 end;
 
+-- Test with a function that will fail 3 times before succeeding
+-- local function TestFunc()
+--     local Random = math.random(1, 10);
+--     if (Random > 3) then
+--         error("Failed!");
+--     else
+--         return "Success!";
+--     end;
+-- end;
+
+-- local function Test()
+--     RetryWithBackoff(TestFunc, 10, 1):andThen(function(Result)
+--         print("Result:", Result);
+--     end):catch(function(Error)
+--         print("Error:", Error);
+--     end);
+-- end;
+
+-- Test();
+
 return RetryWithBackoff;

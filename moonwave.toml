@@ -22,11 +22,11 @@ includeReadme = true # Optional
 
 [[home.features]]
 title = "Simple"
-description = "Leaderboard is so simple, you could have a Daily, Weekly and All Time leaderboard setup in 5 lines of code."
+description = "Leaderboard is so simple, you could have an Hourly, Daily, Weekly, Monthly and All Time leaderboard setup in 5 lines of code."
 
 [[home.features]]
 title = "Fast"
-description = "Leaderboard is fast, it uses the latest and greatest of Roblox's API to ensure that it's as fast as possible."
+description = "Leaderboard is fast, it has been optimized to be as fast as it possibly can be without sacrificing features or functionality."
 
 [[home.features]]
 title = "Lightweight"

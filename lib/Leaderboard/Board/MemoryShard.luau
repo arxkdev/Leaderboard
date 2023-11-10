@@ -208,7 +208,7 @@ function MemoryShard:__getAsync(userId: number)
 	local Shard = self.__shards[ShardKey] or self.__shards[1];
 	return ExponentialBackoff(function()
 		return Shard:GetAsync(userId);
-	end, 5, 1):catch(warn);
+	end, 10, 1):catch(warn);
 end
 
 --[=[
@@ -226,7 +226,7 @@ function MemoryShard:__setAsync(userId: string, value: any, expiry: number, sort
 	local Shard = self.__shards[ShardKey] or self.__shards[1];
 	return ExponentialBackoff(function()
 		return Shard:SetAsync(userId, value, expiry, sortKey);
-	end, 5, 1):catch(warn);
+	end, 10, 1):catch(warn);
 end
 
 --[=[
@@ -243,7 +243,7 @@ function MemoryShard:__updateAsync(userId: string, transformer: (any) -> (any), 
 	local Shard = self.__shards[ShardKey] or self.__shards[1];
 	return ExponentialBackoff(function()
 		return Shard:UpdateAsync(userId, transformer, expiry);
-	end, 5, 1):catch(warn);
+	end, 10, 1):catch(warn);
 end
 
 -- Gets the top data from all the shards for this MemoryShard

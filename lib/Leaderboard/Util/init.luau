@@ -53,4 +53,11 @@ Util.FoundInTable = FoundInTable;
 Util.GetDaysInMonth = GetDaysInMonth;
 Util.ExponentialBackoff = ExponentialBackoff;
 Util.Compression = Compression;
-return Util;
+return Util :: {
+	SmartAssert: (boolean, string) -> ();
+	Map: <T>({T}, (T, number) -> (any)) -> {T};
+	FoundInTable: ({any}, any) -> (boolean | number, any);
+	GetDaysInMonth: () -> number;
+	ExponentialBackoff: typeof(ExponentialBackoff);
+	Compression: typeof(Compression);
+}
