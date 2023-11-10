@@ -58,8 +58,13 @@ export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: 
     @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling"
 ]=]
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
+
+--[=[
+	@within Leaderboard
+	@type LeaderboardTypeArgument {LeaderboardType: string}
+]=]
 export type LeaderboardTypeArgument = {
-	[LeaderboardType]: string,
+	LeaderboardType: string,
 }
 
 --[=[
@@ -163,7 +168,7 @@ local Leaderboards = {} :: {[string]: Leaderboard};
 	For example:
 	```lua
 	local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard);
-	local MoneyLeaderboard = Leaderboard.new("MoneyKey1", {"Daily", "AllTime"};
+	local MoneyLeaderboard = Leaderboard.new({Daily = "DailyMoneyKey1", Weekly = "WeeklyMoneyKey1"});
 	```
 ]=]
 local Leaderboard: Object = {} :: Object;
@@ -174,8 +179,7 @@ local function IsValidLeaderboardType(leaderboardType: LeaderboardType): boolean
 end
 
 --[=[
-	@param serviceKey string
-	@param leaderboardTypes {LeaderboardType}
+	@param leaderboardTypes LeaderboardTypeArgument
 	@param automationSettings AutomationSettings?
 	@param rollingExpiry number?
 	@return Leaderboard
