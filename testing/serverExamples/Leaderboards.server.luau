@@ -9,8 +9,14 @@ type TopData = {Leaderboard.TopData};
 
 -- Constants
 local Key = 1;
-local Leaderboards = {"Hourly", "Daily", "Weekly", "Monthly", "AllTime"};
-local MoneyLeaderboard = Leaderboard.new(`Money-{Key}`, Leaderboards, {
+local Leaderboards = {
+	["Hourly"] = `Hourly-{Key}`,
+	["Daily"] = `Daily-{Key}`,
+	["Weekly"] = `Weekly-{Key}`,
+	["Monthly"] = `Monthly-{Key}`,
+	["AllTime"] = `AllTime-{Key}`,
+};
+local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
 	Interval = 5,
 	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}

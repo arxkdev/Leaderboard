@@ -47,10 +47,19 @@ local function FoundInTable(tbl: {any}, value: any): (boolean | number, any)
 	return Search(tbl, value);
 end
 
+local function KeysInDictionary(dictionary: {any}): {any}
+	local keys = {};
+	for key, _ in pairs(dictionary) do
+		table.insert(keys, key);
+	end;
+	return keys;
+end
+
 Util.SmartAssert = SmartAssert;
 Util.Map = Map;
 Util.FoundInTable = FoundInTable;
 Util.GetDaysInMonth = GetDaysInMonth;
+Util.KeysInDictionary = KeysInDictionary;
 Util.ExponentialBackoff = ExponentialBackoff;
 Util.Compression = Compression;
 return Util :: {

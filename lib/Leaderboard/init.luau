@@ -1,6 +1,7 @@
 --[[
 	Arxk @ 2023
 ]]
+local HttpService = game:GetService("HttpService");
 local Players = game:GetService("Players");
 
 -- Requirements
@@ -11,6 +12,7 @@ local Board = require(script.Board);
 
 -- Variables
 local SmartAssert = Util.SmartAssert;
+local KeysInDictionary = Util.KeysInDictionary;
 
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 24 * 60 * 60 * 45;
@@ -56,6 +58,9 @@ export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: 
     @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling"
 ]=]
 export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
+export type LeaderboardTypeArgument = {
+	[LeaderboardType]: string,
+}
 
 --[=[
 	@within Leaderboard
@@ -105,7 +110,7 @@ type ValueQueueType = {
 	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
 	@field SaveValues (self: Leaderboard) -> ()
 	@field Destroy (self: Leaderboard) -> ()
-	@field new (serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard
+	@field new (leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard
 ]=]
 type Object = {
 	__index: Object,
@@ -115,7 +120,7 @@ type Object = {
 	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	SaveValues: (self: Leaderboard) -> (),
 	Destroy: (self: Leaderboard) -> (),
-	new: (serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard,
+	new: (leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard,
 }
 
 type Board = Board.Board;
@@ -177,16 +182,18 @@ end
 
 	Constructs a new leaderboard.
 ]=]
-function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?)
-	if (table.find(leaderboardTypes, "Rolling") and rollingExpiry ~= nil) then
+function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, rollingExpiry: number?)
+	if (leaderboardTypes["Rolling"] and rollingExpiry ~= nil) then
 		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY, `Rolling expiry must be within 60 and {MEMORY_STORE_SERVICE_MAX_EXPIRY} seconds`);
 		SmartAssert(type(rollingExpiry) == "number", "Rolling expiry must be a number");
 	end;
 
 	-- Check if the leaderboard types are valid
-	SmartAssert(#leaderboardTypes > 0, "Leaderboard types must be greater than 0");
-	for _, v in leaderboardTypes do
-		SmartAssert(IsValidLeaderboardType(v), `Leaderboard type {v} is not valid`);
+	SmartAssert(#KeysInDictionary(leaderboardTypes) > 0, "Leaderboard types must be greater than 0");
+	for boardType, boardKey in leaderboardTypes do
+		SmartAssert(IsValidLeaderboardType(boardType), `Leaderboard type {boardType} is not valid`);
+		SmartAssert(type(boardKey) == "string", "Leaderboard key must be a string");
+		SmartAssert(boardKey ~= "", "Leaderboard key must not be empty");
 	end;
 
 	-- Asserts for settings
@@ -204,7 +211,7 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	self.BoardUpdated = Signal.new();
 
 	-- Private properties
-	self.__serviceKey = serviceKey;
+	self.__serviceKey = HttpService:GenerateGUID(false);
 	self.__types = leaderboardTypes;
 	self.__boards = {};
 	self.__valueQueue = {};
@@ -212,12 +219,11 @@ function Leaderboard.new(serviceKey: string, leaderboardTypes: {LeaderboardType}
 	self.__connections = {};
 
 	-- Add to leaderboards
-	Leaderboards[serviceKey] = self;
+	Leaderboards[self.__serviceKey] = self;
 
 	-- Initialize boards
-	for _, v in leaderboardTypes do
-		local BoardKey = `{serviceKey}-{v}`;
-		self.__boards[v] = Board.new(BoardKey, v, rollingExpiry);
+	for boardType, boardKey in leaderboardTypes do
+		self.__boards[boardType] = Board.new(boardKey, boardType, rollingExpiry);
 	end;
 
 	-- Start automation
@@ -307,14 +313,14 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 
 	-- Get all the data
 	local Promises = {};
-	for _, v in boardTypes do
-		local BoardClass = self.__boards[v] :: Board;
-		SmartAssert(BoardClass ~= nil, `Board type {v} does not exist`)
+	for boardType in boardTypes do
+		local BoardClass = self.__boards[boardType] :: Board;
+		SmartAssert(BoardClass ~= nil, `Board type {boardType} does not exist`)
 
-		local Amount = optionalRange and (type(optionalRange) == "number" and optionalRange or optionalRange[v]) or 100;
+		local Amount = optionalRange and (type(optionalRange) == "number" and optionalRange or optionalRange[boardType]) or 100;
 		table.insert(Promises, BoardClass:Get(Amount, sortDirection):andThen(function(data)
 			return {
-				Type = v,
+				Type = boardType,
 				Data = data,
 			}
 		end));
@@ -336,7 +342,7 @@ end
 function Leaderboard:IncrementValues(boardTypes, userId, amount)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(amount) == "number", "Amount must be a number");
-	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
+	SmartAssert(type(boardTypes) == "table" or type(boardTypes) == "string", "BoardTypes must be a table or a string");
 
 	-- If boardTypes is all, increment all the boards
 	if (boardTypes == "All") then
@@ -349,15 +355,15 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 	end;
 
 	local Queue = self.__valueQueue[userId];
-	for _, v in boardTypes do
+	for boardType in boardTypes do
 		-- Update the value queue
-		if (not Queue[v]) then
-			Queue[v] = {
+		if (not Queue[boardType]) then
+			Queue[boardType] = {
 				Amount = amount,
-				Board = self.__boards[v]
+				Board = self.__boards[boardType]
 			};
 		else
-			Queue[v].Amount += amount;
+			Queue[boardType].Amount += amount;
 		end;
 	end;
 end
@@ -388,15 +394,15 @@ function Leaderboard:SetValues(boardTypes, userId, value)
 	end;
 
 	local Queue = self.__valueQueue[userId];
-	for _, v in boardTypes do
+	for boardType in boardTypes do
 		-- Update the value queue
-		if (not Queue[v]) then
-			Queue[v] = {
+		if (not Queue[boardType]) then
+			Queue[boardType] = {
 				Amount = value,
-				Board = self.__boards[v],
+				Board = self.__boards[boardType],
 			};
 		else
-			Queue[v].Amount = value;
+			Queue[boardType].Amount = value;
 		end;
 	end;
 end
@@ -422,10 +428,10 @@ function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 		boardTypes = self.__types;
 	end;
 
-	for _, v in boardTypes do
-		local BoardClass = self.__boards[v] :: Board;
+	for boardType in boardTypes do
+		local BoardClass = self.__boards[boardType] :: Board;
 		if (not BoardClass) then
-			error(`Board type {v} does not exist`, 2);
+			error(`Board type {boardType} does not exist`, 2);
 		end;
 
 		BoardClass:Update(userId, value);

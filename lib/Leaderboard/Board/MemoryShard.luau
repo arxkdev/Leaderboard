@@ -82,9 +82,9 @@ export type TopData = {
 type Object = {
 	__index: Object,
 	__getShardKey: (self: MemoryShard, userId: number) -> (number),
-	__getAsync: (self: MemoryShard, key: string) -> Promise.TypedPromise<any>,
-	__setAsync: (self: MemoryShard, key: string, value: any, expiry: number, sortKey: number) -> Promise.TypedPromise<boolean>,
-	__updateAsync: (self: MemoryShard, key: string, transformer: (any) -> (any), expiry: number) -> Promise.TypedPromise<boolean>,
+	__getAsync: (self: MemoryShard, userId: number) -> Promise.TypedPromise<any>,
+	__setAsync: (self: MemoryShard, userId: number, value: any, expiry: number, sortKey: number) -> Promise.TypedPromise<boolean>,
+	__updateAsync: (self: MemoryShard, userId: number, transformer: (any) -> (any), expiry: number) -> Promise.TypedPromise<boolean>,
 	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: MemoryShard) -> (),
@@ -203,7 +203,7 @@ end
 
 	Gets the value for a specific key from a specific shard
 ]=]
-function MemoryShard:__getAsync(userId: number)
+function MemoryShard:__getAsync(userId)
 	local ShardKey = self:__getShardKey(userId);
 	local Shard = self.__shards[ShardKey] or self.__shards[1];
 	return ExponentialBackoff(function()
@@ -221,7 +221,7 @@ end
 
 	Destroys all the shards for this MemoryShard
 ]=]
-function MemoryShard:__setAsync(userId: string, value: any, expiry: number, sortKey: number)
+function MemoryShard:__setAsync(userId, value, expiry, sortKey)
 	local ShardKey = self:__getShardKey(userId);
 	local Shard = self.__shards[ShardKey] or self.__shards[1];
 	return ExponentialBackoff(function()
@@ -238,7 +238,7 @@ end
 
 	Updates the value for a specific key from a specific shard
 ]=]
-function MemoryShard:__updateAsync(userId: string, transformer: (any) -> (any), expiry: number)
+function MemoryShard:__updateAsync(userId, transformer, expiry)
 	local ShardKey = self:__getShardKey(userId);
 	local Shard = self.__shards[ShardKey] or self.__shards[1];
 	return ExponentialBackoff(function()
