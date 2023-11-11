@@ -12,8 +12,8 @@ local Key = 1;
 -- Constants
 local Leaderboards = {
 	["AllTime"] = `AllTime-{Key}`,
-    [60] = `10MinutesRolling-{Key}`, -- 10 minutes rolling leaderboard
-	[60 * 15] = `15MinutesRolling-{Key}`, -- 15 minutes rolling leaderboard
+    ["10MinutesRolling"] = {60 * 10, `10MinutesRolling-{Key}`}, -- 10 minutes rolling leaderboard
+	["15MinutesRolling"] = {60 * 15, `15MinutesRolling-{Key}`}, -- 15 minutes rolling leaderboard
 };
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,

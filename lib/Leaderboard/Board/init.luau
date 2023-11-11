@@ -29,9 +29,9 @@ local DEBUG = false;
 -- Supports Daily, Weekly, Monthly and AllTime currently
 --[=[
     @within Board
-    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | number
+    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | string
 ]=]
-export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | number
+export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | string;
 
 --[=[
     @within Board
@@ -82,14 +82,14 @@ type MemoryShard = MemoryShard.MemoryShard;
 	@field Update (self: Board, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: Board) -> ()
-	@field new (serviceKey: string, leaderboardType: LeaderboardType) -> Board
+	@field new (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board
 ]=]
 type Object = {
 	__index: Object,
 	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Board) -> (),
-	new: (serviceKey: string, leaderboardType: LeaderboardType) -> Board,
+	new: (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board,
 }
 
 -- Start
@@ -157,15 +157,16 @@ local function ShardCalculation(rollingExpiry: number): number
 	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
 end
 
-local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
+local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
 	if (leaderboardType == "Yearly") then
 		local currentYear = DateTime.now():ToUniversalTime().Year;
 		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{currentYear}:{serviceKey}`);
 	end;
 
-	if (leaderboardType ~= "AllTime" or typeof(leaderboardType) == "number") then
-		local ShardCount = typeof(leaderboardType) == "number" and ShardCalculation(leaderboardType) or SHARD_COUNTS[leaderboardType];
-		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, ShardCount);
+	-- If we are using a MemoryStore, we can just update the data
+	if (leaderboardType ~= "AllTime" or rollingExpiry) then
+		local ShardCount = rollingExpiry and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
+		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
 	end;
 
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
@@ -178,11 +179,11 @@ end
 
 	Creates a new board within the Leaderboard.
 ]=]
-function Board.new(serviceKey: string, leaderboardType: LeaderboardType)
+function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): Board
 	local self = setmetatable({} :: BoardArguments, Board);
 
 	self.__serviceKey = serviceKey;
-	self.__storeType, self.__store = ConstructStore(serviceKey, leaderboardType);
+	self.__storeType, self.__store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
 	self.__threads = {};
 
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store

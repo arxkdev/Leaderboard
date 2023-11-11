@@ -23,9 +23,9 @@ local DEBUG = false;
 
 --[=[
     @within MemoryShard
-    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | number
+    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | string
 ]=]
-export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime" | "Rolling" | number
+export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime" | "Rolling" | string;
 
 --[=[
     @within MemoryShard
@@ -76,7 +76,7 @@ export type TopData = {
 	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: MemoryShard) -> ()
-	@field new (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number) -> MemoryShard
+	@field new (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?) -> MemoryShard
 ]=]
 type Object = {
 	__index: Object,
@@ -87,7 +87,7 @@ type Object = {
 	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: MemoryShard) -> (),
-	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number) -> MemoryShard,
+	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?) -> MemoryShard,
 }
 
 --[=[
@@ -157,12 +157,12 @@ end
 
 	Creates a new MemoryShard
 ]=]
-function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number)
+function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?)
 	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
 	self.__shards = {};
 	self.__shardCount = shardCount;
 	self.__type = leaderboardType;
-	self.__fallbackExpiry = (typeof(leaderboardType) == "number") and leaderboardType or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self.__type];
+	self.__fallbackExpiry = (rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self.__type];
 
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index

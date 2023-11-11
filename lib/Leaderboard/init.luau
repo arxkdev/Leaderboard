@@ -55,9 +55,9 @@ export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: 
 
 --[=[
     @within Leaderboard
-    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | number
+    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | string;
 ]=]
-export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | number
+export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | string;
 
 --[=[
 	@within Leaderboard
@@ -174,9 +174,11 @@ local Leaderboards = {} :: {[string]: Leaderboard};
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 
-local function IsValidLeaderboardType(leaderboardType: LeaderboardType): boolean
-	if (type(leaderboardType) == "number") then
-		return leaderboardType >= 60 and leaderboardType <= MEMORY_STORE_SERVICE_MAX_EXPIRY;
+local function IsValidLeaderboardType(leaderboardType: LeaderboardType, boardKey: string | {number & string}): boolean
+	if (type(boardKey) == "table") then
+		local RollingExpiry = type(boardKey) == "table" and boardKey[1] or nil;
+		print(RollingExpiry);
+		return RollingExpiry >= 60 and RollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY;
 	end;
 	return table.find(BOARD_TYPES, leaderboardType) ~= nil;
 end
@@ -192,8 +194,7 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 	-- Check if the leaderboard types are valid
 	SmartAssert(#KeysInDictionary(leaderboardTypes) > 0, "Leaderboard types must be greater than 0");
 	for boardType, boardKey in leaderboardTypes do
-		SmartAssert(IsValidLeaderboardType(boardType), `Leaderboard type {boardType} is not valid`);
-		SmartAssert(type(boardKey) == "string", "Leaderboard key must be a string");
+		SmartAssert(IsValidLeaderboardType(boardType, boardKey), `Leaderboard type {boardType} is not valid`);
 		SmartAssert(boardKey ~= "", "Leaderboard key must not be empty");
 	end;
 
@@ -224,7 +225,7 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 
 	-- Initialize boards
 	for boardType, boardKey in leaderboardTypes do
-		self.__boards[boardType] = Board.new(boardKey, boardType);
+		self.__boards[boardType] = Board.new(typeof(boardKey) == "table" and boardKey[2] or boardKey, boardType, typeof(boardKey) == "table" and boardKey[1] or nil);
 	end;
 
 	-- Start automation
@@ -304,7 +305,7 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 			SmartAssert(optionalRange > 0, "Optional range must be greater than 0");
 		else
 			for k, v in optionalRange do
-				SmartAssert(IsValidLeaderboardType(k), `Leaderboard type {k} is not valid`);
+				SmartAssert(IsValidLeaderboardType(k, v), `Leaderboard type {k} is not valid`);
 				SmartAssert(type(v) == "number", "Optional range values must be a number");
 				SmartAssert(v <= 100, "You can only get the top 100.");
 				SmartAssert(v > 0, "Optional range values must be greater than 0");
