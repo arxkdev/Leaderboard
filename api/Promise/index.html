@@ -8,8 +8,8 @@ Promises allow you to then attach callbacks that can run once the value becomes 
 or if an error has occurred (known as *rejecting*)."><meta data-rh="true" property="og:description" content="A Promise is an object that represents a value that will exist in the future, but doesn&#x27;t right now.
 Promises allow you to then attach callbacks that can run once the value becomes available (known as *resolving*),
 or if an error has occurred (known as *rejecting*)."><link data-rh="true" rel="icon" href="/Leaderboard/favicon.png"><link data-rh="true" rel="canonical" href="https://arxkdev.github.io/Leaderboard/api/Promise"><link data-rh="true" rel="alternate" href="https://arxkdev.github.io/Leaderboard/api/Promise" hreflang="en"><link data-rh="true" rel="alternate" href="https://arxkdev.github.io/Leaderboard/api/Promise" hreflang="x-default"><link rel="stylesheet" href="/Leaderboard/assets/css/styles.ebce4cc5.css">
-<link rel="preload" href="/Leaderboard/assets/js/runtime~main.67463596.js" as="script">
-<link rel="preload" href="/Leaderboard/assets/js/main.d7665f9e.js" as="script">
+<link rel="preload" href="/Leaderboard/assets/js/runtime~main.b44b203f.js" as="script">
+<link rel="preload" href="/Leaderboard/assets/js/main.b27f8995.js" as="script">
 </head>
 <body class="navigation-with-keyboard">
 <script>!function(){function e(e){document.documentElement.setAttribute("data-theme",e)}var t=function(){var e=null;try{e=localStorage.getItem("theme")}catch(e){}return e}();null!==t?e(t):window.matchMedia("(prefers-color-scheme: dark)").matches?e("dark"):(window.matchMedia("(prefers-color-scheme: light)").matches,e("light"))}()</script><div id="__docusaurus">
@@ -339,7 +339,13 @@ Promise<span class="token punctuation">.</span><span class="token function">fold
   retry, until the returned Promise resolves.
 </p>
 <p>If the amount of retries is exceeded, the function will return the latest rejected Promise.</p>
-</div><div class="divider_rE5g"></div><h3 class="anchor anchorWithStickyNavbar_LWe7" id="fromEvent"><code style="text-decoration:none">fromEvent</code><a href="#fromEvent" class="hash-link" aria-label="Direct link to fromEvent" title="Direct link to fromEvent">​</a></h3><div class="repositoryDetailsContainer_BPdw"><span class="releaseVersion_EonW">since <!-- -->3.0.0</span><a class="sourceButton_sEho" href="https://github.com/arxkdev/Leaderboard/blob/main/lib/Leaderboard/Promise.luau#L2066"><div class="sourceButtonText_Vh0m">&lt;/&gt;</div></a></div><div class="memberString_GwaU"><code>Promise<!-- -->.</code><code class="green_DgR4">fromEvent</code><code>(</code><div class="inset_uKQm"><div><code>event<!-- -->: </code><code class="blue_P4bS">Event</code><code>,</code><span class="inlineDescription_G7Er">-- <span>
+</div><div class="divider_rE5g"></div><h3 class="anchor anchorWithStickyNavbar_LWe7" id="retryWithVariableDelay"><code style="text-decoration:none">retryWithVariableDelay</code><a href="#retryWithVariableDelay" class="hash-link" aria-label="Direct link to retryWithVariableDelay" title="Direct link to retryWithVariableDelay">​</a></h3><div class="repositoryDetailsContainer_BPdw"><a class="sourceButton_sEho" href="https://github.com/arxkdev/Leaderboard/blob/main/lib/Leaderboard/Promise.luau#L2056"><div class="sourceButtonText_Vh0m">&lt;/&gt;</div></a></div><div class="memberString_GwaU"><code>Promise<!-- -->.</code><code class="green_DgR4">retryWithVariableDelay</code><code>(</code><div class="inset_uKQm"><div><code>callback<!-- -->: </code><code class="purple_ieR2">(</code><code>...<!-- -->: </code><code class="blue_P4bS">P</code><code class="purple_ieR2">)</code><code class="purple_ieR2"> → </code><code class="blue_P4bS"><a style="text-decoration:underline;color:inherit" href="/Leaderboard/api/Promise">Promise</a></code><code class="op_lSLc">&lt;</code><code class="blue_P4bS">T</code><code class="op_lSLc">&gt;</code><code>,</code></div><div><code>times<!-- -->: </code><code class="blue_P4bS">number</code><code>,</code></div><div><code>seconds<!-- -->: </code><code class="blue_P4bS">number</code><code>,</code></div><div><code>equation<!-- -->: </code><code class="blue_P4bS">string</code><code>,</code></div><div><code>...?<!-- -->: </code><code class="blue_P4bS">P</code></div></div><code>) → </code><code class="blue_P4bS"><a style="text-decoration:underline;color:inherit" href="/Leaderboard/api/Promise">Promise</a></code><code class="op_lSLc">&lt;</code><code class="blue_P4bS">T</code><code class="op_lSLc">&gt;</code></div><div>
+<p>
+  Repeatedly calls a Promise-returning function up to <code>times</code> number of times, with a variable delay between retries
+  based on the specified equation ("Linear", "Exponential", or "Quadratic"), until the returned Promise resolves.
+</p>
+<p>If the amount of retries is exceeded, the function will return the latest rejected Promise.</p>
+</div><div class="divider_rE5g"></div><h3 class="anchor anchorWithStickyNavbar_LWe7" id="fromEvent"><code style="text-decoration:none">fromEvent</code><a href="#fromEvent" class="hash-link" aria-label="Direct link to fromEvent" title="Direct link to fromEvent">​</a></h3><div class="repositoryDetailsContainer_BPdw"><span class="releaseVersion_EonW">since <!-- -->3.0.0</span><a class="sourceButton_sEho" href="https://github.com/arxkdev/Leaderboard/blob/main/lib/Leaderboard/Promise.luau#L2115"><div class="sourceButtonText_Vh0m">&lt;/&gt;</div></a></div><div class="memberString_GwaU"><code>Promise<!-- -->.</code><code class="green_DgR4">fromEvent</code><code>(</code><div class="inset_uKQm"><div><code>event<!-- -->: </code><code class="blue_P4bS">Event</code><code>,</code><span class="inlineDescription_G7Er">-- <span>
 <p>Any object with a <code>Connect</code> method. This includes all Roblox events.</p>
 </span></span></div><div><code>predicate?<!-- -->: </code><code class="purple_ieR2">(</code><code>...<!-- -->: </code><code class="blue_P4bS">P</code><code class="purple_ieR2">)</code><code class="purple_ieR2"> → </code><code class="blue_P4bS">boolean</code><span class="inlineDescription_G7Er">-- <span>
 <p>A function which determines if the Promise should resolve with the given value, or wait for the next event to check again.</p>
@@ -363,7 +369,7 @@ Promise<span class="token punctuation">.</span><span class="token function">fold
 	<span class="token keyword">return</span> part<span class="token punctuation">.</span>Name <span class="token operator">==</span> <span class="token string">"Something specific"</span>
 <span class="token keyword">end</span><span class="token punctuation">)</span>
 </code></pre>
-</div><div class="divider_rE5g"></div><h3 class="anchor anchorWithStickyNavbar_LWe7" id="onUnhandledRejection"><code style="text-decoration:none">onUnhandledRejection</code><a href="#onUnhandledRejection" class="hash-link" aria-label="Direct link to onUnhandledRejection" title="Direct link to onUnhandledRejection">​</a></h3><div class="repositoryDetailsContainer_BPdw"><span class="releaseVersion_EonW">since <!-- -->v3.2.0</span><a class="sourceButton_sEho" href="https://github.com/arxkdev/Leaderboard/blob/main/lib/Leaderboard/Promise.luau#L2118"><div class="sourceButtonText_Vh0m">&lt;/&gt;</div></a></div><div class="memberString_GwaU"><code>Promise<!-- -->.</code><code class="green_DgR4">onUnhandledRejection</code><code>(</code><div class="inset_uKQm"><div><code>callback<!-- -->: </code><code class="purple_ieR2">(</code><div class="inset_uKQm"><code>promise<!-- -->: </code><code class="blue_P4bS"><a style="text-decoration:underline;color:inherit" href="/Leaderboard/api/Promise">Promise</a></code><code class="purple_ieR2">,</code></div><div class="inset_uKQm"><code>...<!-- -->: </code><code class="blue_P4bS">any</code></div><code class="purple_ieR2">)</code><span class="inlineDescription_G7Er">-- <span>
+</div><div class="divider_rE5g"></div><h3 class="anchor anchorWithStickyNavbar_LWe7" id="onUnhandledRejection"><code style="text-decoration:none">onUnhandledRejection</code><a href="#onUnhandledRejection" class="hash-link" aria-label="Direct link to onUnhandledRejection" title="Direct link to onUnhandledRejection">​</a></h3><div class="repositoryDetailsContainer_BPdw"><span class="releaseVersion_EonW">since <!-- -->v3.2.0</span><a class="sourceButton_sEho" href="https://github.com/arxkdev/Leaderboard/blob/main/lib/Leaderboard/Promise.luau#L2167"><div class="sourceButtonText_Vh0m">&lt;/&gt;</div></a></div><div class="memberString_GwaU"><code>Promise<!-- -->.</code><code class="green_DgR4">onUnhandledRejection</code><code>(</code><div class="inset_uKQm"><div><code>callback<!-- -->: </code><code class="purple_ieR2">(</code><div class="inset_uKQm"><code>promise<!-- -->: </code><code class="blue_P4bS"><a style="text-decoration:underline;color:inherit" href="/Leaderboard/api/Promise">Promise</a></code><code class="purple_ieR2">,</code></div><div class="inset_uKQm"><code>...<!-- -->: </code><code class="blue_P4bS">any</code></div><code class="purple_ieR2">)</code><span class="inlineDescription_G7Er">-- <span>
 <p>A callback that runs when an unhandled rejection happens.</p>
 </span></span></div></div><code>) → </code><code class="purple_ieR2">(</code><code class="purple_ieR2">)</code><code class="purple_ieR2"> → </code><code class="purple_ieR2">(</code><code class="purple_ieR2">)</code><span class="inlineDescription_G7Er">-- <span>
 <p>Function that unregisters the <code>callback</code> when called</p>
@@ -1389,6 +1395,48 @@ Promise<span class="token punctuation">.</span><span class="token function">fold
             }
         },
         {
+            &quot;name&quot;: &quot;retryWithVariableDelay&quot;,
+            &quot;desc&quot;: &quot;Repeatedly calls a Promise-returning function up to `times` number of times, with a variable delay between retries\nbased on the specified equation (\&quot;Linear\&quot;, \&quot;Exponential\&quot;, or \&quot;Quadratic\&quot;), until the returned Promise resolves.\n\nIf the amount of retries is exceeded, the function will return the latest rejected Promise.&quot;,
+            &quot;params&quot;: [
+                {
+                    &quot;name&quot;: &quot;callback&quot;,
+                    &quot;desc&quot;: &quot;&quot;,
+                    &quot;lua_type&quot;: &quot;(...: P) -&gt; Promise&lt;T&gt;&quot;
+                },
+                {
+                    &quot;name&quot;: &quot;times&quot;,
+                    &quot;desc&quot;: &quot;&quot;,
+                    &quot;lua_type&quot;: &quot;number&quot;
+                },
+                {
+                    &quot;name&quot;: &quot;seconds&quot;,
+                    &quot;desc&quot;: &quot;&quot;,
+                    &quot;lua_type&quot;: &quot;number&quot;
+                },
+                {
+                    &quot;name&quot;: &quot;equation&quot;,
+                    &quot;desc&quot;: &quot;&quot;,
+                    &quot;lua_type&quot;: &quot;string&quot;
+                },
+                {
+                    &quot;name&quot;: &quot;...?&quot;,
+                    &quot;desc&quot;: &quot;&quot;,
+                    &quot;lua_type&quot;: &quot;P&quot;
+                }
+            ],
+            &quot;returns&quot;: [
+                {
+                    &quot;desc&quot;: &quot;&quot;,
+                    &quot;lua_type&quot;: &quot;Promise&lt;T&gt;&quot;
+                }
+            ],
+            &quot;function_type&quot;: &quot;static&quot;,
+            &quot;source&quot;: {
+                &quot;line&quot;: 2056,
+                &quot;path&quot;: &quot;lib/Leaderboard/Promise.luau&quot;
+            }
+        },
+        {
             &quot;name&quot;: &quot;fromEvent&quot;,
             &quot;desc&quot;: &quot;Converts an event into a Promise which resolves the next time the event fires.\n\nThe optional `predicate` callback, if passed, will receive the event arguments and should return `true` or `false`, based on if this fired event should resolve the Promise or not. If `true`, the Promise resolves. If `false`, nothing happens and the predicate will be rerun the next time the event fires.\n\nThe Promise will resolve with the event arguments.\n\n:::tip\nThis function will work given any object with a `Connect` method. This includes all Roblox events.\n:::\n\n```lua\n-- Creates a Promise which only resolves when `somePart` is touched\n-- by a part named `\&quot;Something specific\&quot;`.\nreturn Promise.fromEvent(somePart.Touched, function(part)\n\treturn part.Name == \&quot;Something specific\&quot;\nend)\n```&quot;,
             &quot;params&quot;: [
@@ -1412,7 +1460,7 @@ Promise<span class="token punctuation">.</span><span class="token function">fold
             &quot;function_type&quot;: &quot;static&quot;,
             &quot;since&quot;: &quot;3.0.0&quot;,
             &quot;source&quot;: {
-                &quot;line&quot;: 2066,
+                &quot;line&quot;: 2115,
                 &quot;path&quot;: &quot;lib/Leaderboard/Promise.luau&quot;
             }
         },
@@ -1435,7 +1483,7 @@ Promise<span class="token punctuation">.</span><span class="token function">fold
             &quot;function_type&quot;: &quot;static&quot;,
             &quot;since&quot;: &quot;v3.2.0&quot;,
             &quot;source&quot;: {
-                &quot;line&quot;: 2118,
+                &quot;line&quot;: 2167,
                 &quot;path&quot;: &quot;lib/Leaderboard/Promise.luau&quot;
             }
         }
@@ -1496,8 +1544,8 @@ Promise<span class="token punctuation">.</span><span class="token function">fold
         &quot;line&quot;: 282,
         &quot;path&quot;: &quot;lib/Leaderboard/Promise.luau&quot;
     }
-}</pre></details></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#types" class="table-of-contents__link toc-highlight">Types</a><ul><li><a href="#Status" class="table-of-contents__link toc-highlight">Status</a></li></ul></li><li><a href="#properties" class="table-of-contents__link toc-highlight">Properties</a><ul><li><a href="#Status" class="table-of-contents__link toc-highlight">Status</a></li></ul></li><li><a href="#functions" class="table-of-contents__link toc-highlight">Functions</a><ul><li><a href="#andThen" class="table-of-contents__link toc-highlight">:andThen</a></li><li><a href="#andThenCall" class="table-of-contents__link toc-highlight">:andThenCall</a></li><li><a href="#andThenReturn" class="table-of-contents__link toc-highlight">:andThenReturn</a></li><li><a href="#await" class="table-of-contents__link toc-highlight">:await</a></li><li><a href="#awaitStatus" class="table-of-contents__link toc-highlight">:awaitStatus</a></li><li><a href="#cancel" class="table-of-contents__link toc-highlight">:cancel</a></li><li><a href="#catch" class="table-of-contents__link toc-highlight">:catch</a></li><li><a href="#expect" class="table-of-contents__link toc-highlight">:expect</a></li><li><a href="#finally" class="table-of-contents__link toc-highlight">:finally</a></li><li><a href="#finallyCall" class="table-of-contents__link toc-highlight">:finallyCall</a></li><li><a href="#finallyReturn" class="table-of-contents__link toc-highlight">:finallyReturn</a></li><li><a href="#getStatus" class="table-of-contents__link toc-highlight">:getStatus</a></li><li><a href="#now" class="table-of-contents__link toc-highlight">:now</a></li><li><a href="#tap" class="table-of-contents__link toc-highlight">:tap</a></li><li><a href="#timeout" class="table-of-contents__link toc-highlight">:timeout</a></li><li><a href="#all" class="table-of-contents__link toc-highlight">.all</a></li><li><a href="#allSettled" class="table-of-contents__link toc-highlight">.allSettled</a></li><li><a href="#any" class="table-of-contents__link toc-highlight">.any</a></li><li><a href="#defer" class="table-of-contents__link toc-highlight">.defer</a></li><li><a href="#delay" class="table-of-contents__link toc-highlight">.delay</a></li><li><a href="#each" class="table-of-contents__link toc-highlight">.each</a></li><li><a href="#fold" class="table-of-contents__link toc-highlight">.fold</a></li><li><a href="#fromEvent" class="table-of-contents__link toc-highlight">.fromEvent</a></li><li><a href="#is" class="table-of-contents__link toc-highlight">.is</a></li><li><a href="#new" class="table-of-contents__link toc-highlight">.new</a></li><li><a href="#onUnhandledRejection" class="table-of-contents__link toc-highlight">.onUnhandledRejection</a></li><li><a href="#promisify" class="table-of-contents__link toc-highlight">.promisify</a></li><li><a href="#race" class="table-of-contents__link toc-highlight">.race</a></li><li><a href="#reject" class="table-of-contents__link toc-highlight">.reject</a></li><li><a href="#resolve" class="table-of-contents__link toc-highlight">.resolve</a></li><li><a href="#retry" class="table-of-contents__link toc-highlight">.retry</a></li><li><a href="#retryWithDelay" class="table-of-contents__link toc-highlight">.retryWithDelay</a></li><li><a href="#some" class="table-of-contents__link toc-highlight">.some</a></li><li><a href="#try" class="table-of-contents__link toc-highlight">.try</a></li></ul></li></ul></div></div></div></div></main></div></div><footer class="footer footer--dark"><div class="container container-fluid"><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2023 Arxk. Built with Moonwave and Docusaurus</div></div></div></footer></div>
-<script src="/Leaderboard/assets/js/runtime~main.67463596.js"></script>
-<script src="/Leaderboard/assets/js/main.d7665f9e.js"></script>
+}</pre></details></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#types" class="table-of-contents__link toc-highlight">Types</a><ul><li><a href="#Status" class="table-of-contents__link toc-highlight">Status</a></li></ul></li><li><a href="#properties" class="table-of-contents__link toc-highlight">Properties</a><ul><li><a href="#Status" class="table-of-contents__link toc-highlight">Status</a></li></ul></li><li><a href="#functions" class="table-of-contents__link toc-highlight">Functions</a><ul><li><a href="#andThen" class="table-of-contents__link toc-highlight">:andThen</a></li><li><a href="#andThenCall" class="table-of-contents__link toc-highlight">:andThenCall</a></li><li><a href="#andThenReturn" class="table-of-contents__link toc-highlight">:andThenReturn</a></li><li><a href="#await" class="table-of-contents__link toc-highlight">:await</a></li><li><a href="#awaitStatus" class="table-of-contents__link toc-highlight">:awaitStatus</a></li><li><a href="#cancel" class="table-of-contents__link toc-highlight">:cancel</a></li><li><a href="#catch" class="table-of-contents__link toc-highlight">:catch</a></li><li><a href="#expect" class="table-of-contents__link toc-highlight">:expect</a></li><li><a href="#finally" class="table-of-contents__link toc-highlight">:finally</a></li><li><a href="#finallyCall" class="table-of-contents__link toc-highlight">:finallyCall</a></li><li><a href="#finallyReturn" class="table-of-contents__link toc-highlight">:finallyReturn</a></li><li><a href="#getStatus" class="table-of-contents__link toc-highlight">:getStatus</a></li><li><a href="#now" class="table-of-contents__link toc-highlight">:now</a></li><li><a href="#tap" class="table-of-contents__link toc-highlight">:tap</a></li><li><a href="#timeout" class="table-of-contents__link toc-highlight">:timeout</a></li><li><a href="#all" class="table-of-contents__link toc-highlight">.all</a></li><li><a href="#allSettled" class="table-of-contents__link toc-highlight">.allSettled</a></li><li><a href="#any" class="table-of-contents__link toc-highlight">.any</a></li><li><a href="#defer" class="table-of-contents__link toc-highlight">.defer</a></li><li><a href="#delay" class="table-of-contents__link toc-highlight">.delay</a></li><li><a href="#each" class="table-of-contents__link toc-highlight">.each</a></li><li><a href="#fold" class="table-of-contents__link toc-highlight">.fold</a></li><li><a href="#fromEvent" class="table-of-contents__link toc-highlight">.fromEvent</a></li><li><a href="#is" class="table-of-contents__link toc-highlight">.is</a></li><li><a href="#new" class="table-of-contents__link toc-highlight">.new</a></li><li><a href="#onUnhandledRejection" class="table-of-contents__link toc-highlight">.onUnhandledRejection</a></li><li><a href="#promisify" class="table-of-contents__link toc-highlight">.promisify</a></li><li><a href="#race" class="table-of-contents__link toc-highlight">.race</a></li><li><a href="#reject" class="table-of-contents__link toc-highlight">.reject</a></li><li><a href="#resolve" class="table-of-contents__link toc-highlight">.resolve</a></li><li><a href="#retry" class="table-of-contents__link toc-highlight">.retry</a></li><li><a href="#retryWithDelay" class="table-of-contents__link toc-highlight">.retryWithDelay</a></li><li><a href="#retryWithVariableDelay" class="table-of-contents__link toc-highlight">.retryWithVariableDelay</a></li><li><a href="#some" class="table-of-contents__link toc-highlight">.some</a></li><li><a href="#try" class="table-of-contents__link toc-highlight">.try</a></li></ul></li></ul></div></div></div></div></main></div></div><footer class="footer footer--dark"><div class="container container-fluid"><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2023 Arxk. Built with Moonwave and Docusaurus</div></div></div></footer></div>
+<script src="/Leaderboard/assets/js/runtime~main.b44b203f.js"></script>
+<script src="/Leaderboard/assets/js/main.b27f8995.js"></script>
 </body>
 </html>
