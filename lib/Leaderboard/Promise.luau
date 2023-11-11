@@ -2073,7 +2073,7 @@ function Promise.retryWithVariableDelay(callback, times, seconds, equation, ...)
 				elseif equation == "Quadratic" then
 					delaySeconds = seconds * math.pow(attempts, 2)
 				end
-				Promise.delay(seconds):await()
+				Promise.delay(delaySeconds):await()
 
 				return attempt()
 			else
