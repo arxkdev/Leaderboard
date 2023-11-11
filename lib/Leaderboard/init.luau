@@ -10,7 +10,7 @@ local Signal = require(script.Signal);
 local Promise = require(script.Promise);
 local Board = require(script.Board);
 
--- Variables
+-- Variables 
 local SmartAssert = Util.SmartAssert;
 local KeysInDictionary = Util.KeysInDictionary;
 
