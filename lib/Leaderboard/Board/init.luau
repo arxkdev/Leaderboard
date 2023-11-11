@@ -14,7 +14,6 @@ local Util = require(script.Parent.Util);
 
 -- Variables
 local Compression = Util.Compression;
-local ExponentialBackoff = Util.ExponentialBackoff;
 local SmartAssert = Util.SmartAssert;
 local Map = Util.Map;
 
@@ -271,7 +270,7 @@ function Board:Update(userId, value)
 	end;
 
 	-- Using an actual DataStore, we need to set the data
-	return ExponentialBackoff(function()
+	return Promise.retryWithVariableDelay(function()
 		return self.__store:UpdateAsync(userId, function(oldValue)
 			oldValue = oldValue and Compression.Decompress(oldValue) or 0;
 			local transformedValue = (type(value) == "function") and value(oldValue) or value;
@@ -287,7 +286,7 @@ function Board:Update(userId, value)
 			end;
 			return nil;
 		end);
-	end, 10, 1):catch(warn);
+	end, 10, 1, "Exponential"):catch(warn);
 end
 
 -- Destroys the board

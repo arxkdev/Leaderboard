@@ -7,7 +7,6 @@ local Promise = require(Leaderboard.Promise);
 local HashLib = require(Leaderboard.HashLib);
 
 -- Variables
-local ExponentialBackoff = Util.ExponentialBackoff;
 local Compression = Util.Compression;
 local SmartAssert = Util.SmartAssert;
 local FoundInTable = Util.FoundInTable;
@@ -206,9 +205,9 @@ end
 function MemoryShard:__getAsync(userId)
 	local ShardKey = self:__getShardKey(userId);
 	local Shard = self.__shards[ShardKey] or self.__shards[1];
-	return ExponentialBackoff(function()
+	return Promise.retryWithVariableDelay(function()
 		return Shard:GetAsync(userId);
-	end, 10, 1):catch(warn);
+	end, 10, 1, "Exponential"):catch(warn);
 end
 
 --[=[
@@ -224,9 +223,9 @@ end
 function MemoryShard:__setAsync(userId, value, expiry, sortKey)
 	local ShardKey = self:__getShardKey(userId);
 	local Shard = self.__shards[ShardKey] or self.__shards[1];
-	return ExponentialBackoff(function()
+	return Promise.retryWithVariableDelay(function()
 		return Shard:SetAsync(userId, value, expiry, sortKey);
-	end, 10, 1):catch(warn);
+	end, 10, 1, "Exponential"):catch(warn);
 end
 
 --[=[
@@ -241,9 +240,9 @@ end
 function MemoryShard:__updateAsync(userId, transformer, expiry)
 	local ShardKey = self:__getShardKey(userId);
 	local Shard = self.__shards[ShardKey] or self.__shards[1];
-	return ExponentialBackoff(function()
+	return Promise.retryWithVariableDelay(function()
 		return Shard:UpdateAsync(userId, transformer, expiry);
-	end, 10, 1):catch(warn);
+	end, 10, 1, "Exponential"):catch(warn);
 end
 
 -- Gets the top data from all the shards for this MemoryShard
@@ -298,7 +297,7 @@ function MemoryShard:Get(topAmount, sortDirection)
 	-- Go through the shards, extract the data, and combine it
 	local Promises = {};
 	for _, Shard in self.__shards do
-		local ShardPromise = ExponentialBackoff(ProcessShard(Shard), 5, 1):andThen(function(Result)
+		local ShardPromise = Promise.retryWithVariableDelay(ProcessShard(Shard), 10, 1, "Exponential"):andThen(function(Result)
 			for _, entry in ipairs(Result) do
 				ProcessEntry(entry);
 			end;

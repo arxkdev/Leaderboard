@@ -1,6 +1,5 @@
 -- Requirements
 local Compression = require(script.Compression);
-local ExponentialBackoff = require(script.ExponentialBackoff);
 
 local Util = {};
 local DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
@@ -60,13 +59,13 @@ Util.Map = Map;
 Util.FoundInTable = FoundInTable;
 Util.GetDaysInMonth = GetDaysInMonth;
 Util.KeysInDictionary = KeysInDictionary;
-Util.ExponentialBackoff = ExponentialBackoff;
 Util.Compression = Compression;
+
 return Util :: {
 	SmartAssert: (boolean, string) -> ();
 	Map: <T>({T}, (T, number) -> (any)) -> {T};
 	FoundInTable: ({any}, any) -> (boolean | number, any);
 	GetDaysInMonth: () -> number;
-	ExponentialBackoff: typeof(ExponentialBackoff);
 	Compression: typeof(Compression);
+	KeysInDictionary: ({any}) -> {any};
 }
