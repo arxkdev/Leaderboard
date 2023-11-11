@@ -16,7 +16,7 @@ local KeysInDictionary = Util.KeysInDictionary;
 
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 24 * 60 * 60 * 45;
-local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime", "Rolling"};
+local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime"};
 
 --[=[
 	@within Leaderboard
@@ -55,9 +55,9 @@ export type Leaderboard = typeof(setmetatable({} :: LeaderboardArguments, {} :: 
 
 --[=[
     @within Leaderboard
-    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling"
+    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | number
 ]=]
-export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling";
+export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | number
 
 --[=[
 	@within Leaderboard
@@ -115,7 +115,7 @@ type ValueQueueType = {
 	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
 	@field SaveValues (self: Leaderboard) -> ()
 	@field Destroy (self: Leaderboard) -> ()
-	@field new (leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard
+	@field new (leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?) -> Leaderboard
 ]=]
 type Object = {
 	__index: Object,
@@ -125,7 +125,7 @@ type Object = {
 	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	SaveValues: (self: Leaderboard) -> (),
 	Destroy: (self: Leaderboard) -> (),
-	new: (leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, rollingExpiry: number?) -> Leaderboard,
+	new: (leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?) -> Leaderboard,
 }
 
 type Board = Board.Board;
@@ -175,23 +175,20 @@ local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 
 local function IsValidLeaderboardType(leaderboardType: LeaderboardType): boolean
+	if (type(leaderboardType) == "number") then
+		return leaderboardType >= 60 and leaderboardType <= MEMORY_STORE_SERVICE_MAX_EXPIRY;
+	end;
 	return table.find(BOARD_TYPES, leaderboardType) ~= nil;
 end
 
 --[=[
 	@param leaderboardTypes LeaderboardTypeArgument
 	@param automationSettings AutomationSettings?
-	@param rollingExpiry number?
 	@return Leaderboard
 
 	Constructs a new leaderboard.
 ]=]
-function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, rollingExpiry: number?)
-	if (leaderboardTypes["Rolling"] and rollingExpiry ~= nil) then
-		SmartAssert(rollingExpiry >= 60 and rollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY, `Rolling expiry must be within 60 and {MEMORY_STORE_SERVICE_MAX_EXPIRY} seconds`);
-		SmartAssert(type(rollingExpiry) == "number", "Rolling expiry must be a number");
-	end;
-
+function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?)
 	-- Check if the leaderboard types are valid
 	SmartAssert(#KeysInDictionary(leaderboardTypes) > 0, "Leaderboard types must be greater than 0");
 	for boardType, boardKey in leaderboardTypes do
@@ -227,7 +224,7 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 
 	-- Initialize boards
 	for boardType, boardKey in leaderboardTypes do
-		self.__boards[boardType] = Board.new(boardKey, boardType, rollingExpiry);
+		self.__boards[boardType] = Board.new(boardKey, boardType);
 	end;
 
 	-- Start automation
@@ -324,7 +321,7 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 		local Amount = optionalRange and (type(optionalRange) == "number" and optionalRange or optionalRange[boardType]) or 100;
 		table.insert(Promises, BoardClass:Get(Amount, sortDirection):andThen(function(data)
 			return {
-				Type = boardType,
+				Type = boardType, -- We want to tell the difference between rolling and non-rolling
 				Data = data,
 			}
 		end));

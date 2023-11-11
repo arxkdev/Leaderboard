@@ -57,7 +57,7 @@ MoneyLeaderboard.Updated:Connect(function(boards)
 	-- Returns us a table of all the boards that were updated
 	for _, board in boards do
 		print(`Updating board {board.Type} - with {#board.Data} items!`);
-		UpdateBoard(board.Data, workspace.Leaderboards[board.Type]);
+		UpdateBoard(board.Data, workspace.Test1.Leaderboards[board.Type]);
 	end;
 end);
 -- MoneyLeaderboard.BoardUpdated:Connect(function(board)
