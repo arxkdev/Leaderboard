@@ -4,13 +4,13 @@ local MemoryStoreService = game:GetService("MemoryStoreService");
 local Leaderboard = script.Parent.Parent;
 local Util = require(Leaderboard.Util);
 local Promise = require(Leaderboard.Promise);
-local HashLib = require(Leaderboard.HashLib);
 
 -- Variables
 local Compression = Util.Compression;
 local SmartAssert = Util.SmartAssert;
 local FoundInTable = Util.FoundInTable;
 local GetDaysInMonth = Util.GetDaysInMonth;
+local Sha1 = Util.Sha1;
 
 -- Constants
 local FALLBACK_EXPIRY_TIMES = {
@@ -187,7 +187,7 @@ function MemoryShard:__getShardKey(userId)
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
 
 	-- Get the SHA-256 hash of the userId
-	local ShaHash = HashLib.sha1(tostring(userId));
+	local ShaHash = Sha1.sha1(tostring(userId));
 	local HashPrefix = tonumber(string.sub(ShaHash, 1, 8), 16);
 
 	-- Use the modulo operation to get the shard index

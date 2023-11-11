@@ -1,5 +1,6 @@
 -- Requirements
 local Compression = require(script.Compression);
+local Sha1 = require(script.Sha1);
 
 local Util = {};
 local DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
@@ -60,6 +61,7 @@ Util.FoundInTable = FoundInTable;
 Util.GetDaysInMonth = GetDaysInMonth;
 Util.KeysInDictionary = KeysInDictionary;
 Util.Compression = Compression;
+Util.Sha1 = Sha1;
 
 return Util :: {
 	SmartAssert: (boolean, string) -> ();
@@ -68,4 +70,5 @@ return Util :: {
 	GetDaysInMonth: () -> number;
 	Compression: typeof(Compression);
 	KeysInDictionary: ({any}) -> {any};
+	Sha1: typeof(Sha1);
 }
