@@ -2022,9 +2022,9 @@ end
 	@return Promise<T>
 ]=]
 function Promise.retryWithDelay(callback, times, seconds, ...)
-	assert(isCallable(callback), "Parameter #1 to Promise.retry must be a function")
-	assert(type(times) == "number", "Parameter #2 (times) to Promise.retry must be a number")
-	assert(type(seconds) == "number", "Parameter #3 (seconds) to Promise.retry must be a number")
+	assert(isCallable(callback), "Parameter #1 to Promise.retryWithDelay must be a function")
+	assert(type(times) == "number", "Parameter #2 (times) to Promise.retryWithDelay must be a number")
+	assert(type(seconds) == "number", "Parameter #3 (seconds) to Promise.retryWithDelay must be a number")
 
 	local args, length = { ... }, select("#", ...)
 
@@ -2036,6 +2036,55 @@ function Promise.retryWithDelay(callback, times, seconds, ...)
 		else
 			return Promise.reject(...)
 		end
+	end)
+end
+
+
+--[=[
+	Repeatedly calls a Promise-returning function up to `times` number of times, with a variable delay between retries
+	based on the specified equation ("Linear", "Exponential", or "Quadratic"), until the returned Promise resolves.
+
+	If the amount of retries is exceeded, the function will return the latest rejected Promise.
+
+	@param callback (...: P) -> Promise<T>
+	@param times number
+	@param seconds number
+	@param equation string
+	@param ...? P
+	@return Promise<T>
+]=]
+function Promise.retryWithVariableDelay(callback, times, seconds, equation, ...)
+	assert(isCallable(callback), "Parameter #1 to Promise.retryWithVariableDelay must be a function")
+	assert(type(times) == "number", "Parameter #2 (times) to Promise.retryWithVariableDelay must be a number")
+	assert(type(seconds) == "number", "Parameter #3 (seconds) to Promise.retryWithVariableDelay must be a number")
+	assert(type(equation) == "string", "Parameter #3 (seconds) to Promise.retryWithVariableDelay must be a string")
+
+	local attempts = 0
+	local args, length = { ... }, select("#", ...)
+
+	local function attempt()
+		attempts += 1
+		return Promise.resolve(callback(unpack(args, 1, length))):catch(function(...)
+			if attempts < times then
+				
+				local delaySeconds = seconds
+				if equation == "Exponential" then
+					delaySeconds = seconds * math.pow(2, attempts)
+				elseif equation == "Quadratic" then
+					delaySeconds = seconds * math.pow(attempts, 2)
+				end
+				Promise.delay(delaySeconds):await()
+
+				return attempt()
+			else
+				warn("Return reject")
+				return Promise.reject(...)
+			end
+		end)
+	end
+
+	return Promise.new(function(resolve, reject)
+		attempt():andThen(resolve):catch(reject)
 	end)
 end
 
@@ -2175,6 +2224,13 @@ return Promise :: {
 		callback: (TArgs...) -> TypedPromise<TReturn...>,
 		times: number,
 		seconds: number,
+		TArgs...
+	) -> TypedPromise<TReturn...>,
+	retryWithVariableDelay: <TArgs..., TReturn...>(
+		callback: (TArgs...) -> TypedPromise<TReturn...>,
+		times: number,
+		seconds: number,
+		equation: "Exponential" | "Quadratic",
 		TArgs...
 	) -> TypedPromise<TReturn...>,
 	some: <T>(promise: { TypedPromise<T> }, count: number) -> TypedPromise<{ T }>,
