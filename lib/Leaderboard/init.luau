@@ -10,7 +10,7 @@ local Signal = require(script.Signal);
 local Promise = require(script.Promise);
 local Board = require(script.Board);
 
--- Variables 
+-- Variables
 local SmartAssert = Util.SmartAssert;
 local KeysInDictionary = Util.KeysInDictionary;
 
@@ -72,22 +72,22 @@ export type LeaderboardTypeArgument = {
 	@interface LeaderboardArguments
 	@field Updated Signal<{AllTopData}>
 	@field BoardUpdated Signal<{Type: LeaderboardType, Data: {TopData}}>
-	@field __serviceKey string
-	@field __types {LeaderboardType}
-	@field __boards {LeaderboardType: Board}
-	@field __valueQueue ValueQueueType
-	@field __threads {thread}
-	@field __connections {RBXScriptConnection}
+	@field _serviceKey string
+	@field _types {LeaderboardType}
+	@field _boards {LeaderboardType: Board}
+	@field _valueQueue ValueQueueType
+	@field _threads {thread}
+	@field _connections {RBXScriptConnection}
 ]=]
 export type LeaderboardArguments = {
 	Updated: Signal.Signal<{AllTopData}>,
 	BoardUpdated: Signal.Signal<{Type: LeaderboardType, Data: {TopData}}>,
-	__serviceKey: string,
-	__types: {LeaderboardType},
-	__boards: {LeaderboardType: Board},
-	__valueQueue: ValueQueueType,
-	__threads: {thread},
-	__connections: {RBXScriptConnection},
+	_serviceKey: string,
+	_types: {LeaderboardType},
+	_boards: {LeaderboardType: Board},
+	_valueQueue: ValueQueueType,
+	_threads: {thread},
+	_connections: {RBXScriptConnection},
 }
 
 --[=[
@@ -168,7 +168,10 @@ local Leaderboards = {} :: {[string]: Leaderboard};
 	For example:
 	```lua
 	local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard);
-	local MoneyLeaderboard = Leaderboard.new({Daily = "DailyMoneyKey1", Weekly = "WeeklyMoneyKey1"});
+	local MoneyLeaderboard = Leaderboard.new({
+		Daily = "DailyMoneyKey1",
+		Weekly = "WeeklyMoneyKey1"
+	});
 	```
 ]=]
 local Leaderboard: Object = {} :: Object;
@@ -177,7 +180,6 @@ Leaderboard.__index = Leaderboard;
 local function IsValidLeaderboardType(leaderboardType: LeaderboardType, boardKey: string | {number & string}): boolean
 	if (type(boardKey) == "table") then
 		local RollingExpiry = type(boardKey) == "table" and boardKey[1] or nil;
-		print(RollingExpiry);
 		return RollingExpiry >= 60 and RollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY;
 	end;
 	return table.find(BOARD_TYPES, leaderboardType) ~= nil;
@@ -213,19 +215,19 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 	self.BoardUpdated = Signal.new();
 
 	-- Private properties
-	self.__serviceKey = HttpService:GenerateGUID(false);
-	self.__types = leaderboardTypes;
-	self.__boards = {};
-	self.__valueQueue = {};
-	self.__threads = {};
-	self.__connections = {};
+	self._serviceKey = HttpService:GenerateGUID(false);
+	self._types = leaderboardTypes;
+	self._boards = {};
+	self._valueQueue = {};
+	self._threads = {};
+	self._connections = {};
 
 	-- Add to leaderboards
-	Leaderboards[self.__serviceKey] = self;
+	Leaderboards[self._serviceKey] = self;
 
 	-- Initialize boards
 	for boardType, boardKey in leaderboardTypes do
-		self.__boards[boardType] = Board.new(typeof(boardKey) == "table" and boardKey[2] or boardKey, boardType, typeof(boardKey) == "table" and boardKey[1] or nil);
+		self._boards[boardType] = Board.new(typeof(boardKey) == "table" and boardKey[2] or boardKey, boardType, typeof(boardKey) == "table" and boardKey[1] or nil);
 	end;
 
 	-- Start automation
@@ -245,14 +247,14 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 				task.wait(automationSettings.Interval);
 			end;
 		end);
-		table.insert(self.__threads, Thread);
+		table.insert(self._threads, Thread);
 	end;
 
 	-- Player removing
-	table.insert(self.__connections, Players.PlayerRemoving:Connect(function(player)
+	table.insert(self._connections, Players.PlayerRemoving:Connect(function(player)
 		-- Remove the player from the value queue
-		if (self.__valueQueue[player.UserId]) then
-			self.__valueQueue[player.UserId] = nil;
+		if (self._valueQueue[player.UserId]) then
+			self._valueQueue[player.UserId] = nil;
 		end;
 	end));
 
@@ -266,12 +268,12 @@ end
 	Updates the actual store value(s) (should only be used every 90-120 seconds)
 ]=]
 function Leaderboard:SaveValues()
-	for UserId, BoardType in self.__valueQueue do
+	for UserId, BoardType in self._valueQueue do
 		for _, Data in BoardType do
 			Data.Board:Update(UserId, function(oldValue)
 				return (oldValue + Data.Amount); -- Increment the value
 			end):andThen(function()
-				self.__valueQueue[UserId] = nil;
+				self._valueQueue[UserId] = nil;
 			end);
 		end;
 	end;
@@ -294,7 +296,7 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 
 	-- If boardTypes is all, get all the boards
 	if (boardTypes == "All") then
-		boardTypes = self.__types;
+		boardTypes = self._types;
 	end;
 
 	-- Check if the optional range is valid
@@ -316,7 +318,7 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 	-- Get all the data
 	local Promises = {};
 	for boardType in boardTypes do
-		local BoardClass = self.__boards[boardType] :: Board;
+		local BoardClass = self._boards[boardType] :: Board;
 		SmartAssert(BoardClass ~= nil, `Board type {boardType} does not exist`)
 
 		local Amount = optionalRange and (type(optionalRange) == "number" and optionalRange or optionalRange[boardType]) or 100;
@@ -348,21 +350,21 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 
 	-- If boardTypes is all, increment all the boards
 	if (boardTypes == "All") then
-		boardTypes = self.__types;
+		boardTypes = self._types;
 	end;
 
 	-- Reconcile the value queue
-	if (not self.__valueQueue[userId]) then
-		self.__valueQueue[userId] = {};
+	if (not self._valueQueue[userId]) then
+		self._valueQueue[userId] = {};
 	end;
 
-	local Queue = self.__valueQueue[userId];
+	local Queue = self._valueQueue[userId];
 	for boardType in boardTypes do
 		-- Update the value queue
 		if (not Queue[boardType]) then
 			Queue[boardType] = {
 				Amount = amount,
-				Board = self.__boards[boardType]
+				Board = self._boards[boardType]
 			};
 		else
 			Queue[boardType].Amount += amount;
@@ -387,21 +389,21 @@ function Leaderboard:SetValues(boardTypes, userId, value)
 
 	-- If boardTypes is all, update all the boards
 	if (boardTypes == "All") then
-		boardTypes = self.__types;
+		boardTypes = self._types;
 	end;
 
 	-- Reconcile the value queue
-	if (not self.__valueQueue[userId]) then
-		self.__valueQueue[userId] = {};
+	if (not self._valueQueue[userId]) then
+		self._valueQueue[userId] = {};
 	end;
 
-	local Queue = self.__valueQueue[userId];
+	local Queue = self._valueQueue[userId];
 	for boardType in boardTypes do
 		-- Update the value queue
 		if (not Queue[boardType]) then
 			Queue[boardType] = {
 				Amount = value,
-				Board = self.__boards[boardType],
+				Board = self._boards[boardType],
 			};
 		else
 			Queue[boardType].Amount = value;
@@ -427,11 +429,11 @@ function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 
 	-- If boardTypes is all, update all the boards
 	if (boardTypes == "All") then
-		boardTypes = self.__types;
+		boardTypes = self._types;
 	end;
 
 	for boardType in boardTypes do
-		local BoardClass = self.__boards[boardType] :: Board;
+		local BoardClass = self._boards[boardType] :: Board;
 		if (not BoardClass) then
 			error(`Board type {boardType} does not exist`, 2);
 		end;
@@ -449,25 +451,25 @@ function Leaderboard:Destroy()
 	self:SaveValues();
 
 	-- Destroy all the boards
-	for _, board in self.__boards do
+	for _, board in self._boards do
 		board:Destroy();
 	end;
 
 	-- Cancel all the threads
-	for _, thread in self.__threads do
+	for _, thread in self._threads do
 		if (typeof(thread) == "thread") then
 			task.cancel(thread);
 		end;
 	end;
 
 	-- Disconnect all the connections
-	for _, connection in self.__connections do
+	for _, connection in self._connections do
 		connection:Disconnect();
 	end;
 
 	-- Remove from leaderboards
-	if (Leaderboards[self.__serviceKey]) then
-		Leaderboards[self.__serviceKey] = nil;
+	if (Leaderboards[self._serviceKey]) then
+		Leaderboards[self._serviceKey] = nil;
 	end;
 end
 

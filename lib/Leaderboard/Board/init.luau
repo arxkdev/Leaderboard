@@ -42,18 +42,18 @@ export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
 --[=[
 	@within Board
 	@interface BoardArguments
-	@field __serviceKey string
-	@field __type LeaderboardType
-	@field __storeUsing string
-	@field __store MemoryStoreSortedMap | OrderedDataStore | MemoryShard
-	@field __threads {thread}
+	@field _serviceKey string
+	@field _type LeaderboardType
+	@field _storeUsing string
+	@field _store MemoryStoreSortedMap | OrderedDataStore | MemoryShard
+	@field _threads {thread}
 ]=]
 export type BoardArguments = {
-	__serviceKey: string,
-	__type: LeaderboardType,
-	__storeUsing: string,
-	__store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
-	__threads: {thread},
+	_serviceKey: string,
+	_type: LeaderboardType,
+	_storeUsing: string,
+	_store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
+	_threads: {thread},
 }
 
 --[=[
@@ -182,9 +182,9 @@ end
 function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): Board
 	local self = setmetatable({} :: BoardArguments, Board);
 
-	self.__serviceKey = serviceKey;
-	self.__storeType, self.__store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
-	self.__threads = {};
+	self._serviceKey = serviceKey;
+	self._storeType, self._store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
+	self._threads = {};
 
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
 	-- Ty Proxus for writing this
@@ -206,7 +206,7 @@ function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rolling
 				task.wait(if isLastMinute then nil else 30);
 			end;
 		end);
-		table.insert(self.__threads, thread);
+		table.insert(self._threads, thread);
 	end;
 
 	return self;
@@ -229,13 +229,13 @@ function Board:Get(amount, sortDirection)
 	sortDirection = sortDirection or "Descending";
 
 	local function RetrieveTopData()
-		if (self.__storeType == "MemoryStore") then
-			local Data = self.__store:Get(amount, sortDirection);
+		if (self._storeType == "MemoryStore") then
+			local Data = self._store:Get(amount, sortDirection);
 			return Data:andThen(function(data)
 				return Map(data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 			end);
 		else
-			local Result = self.__store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
+			local Result = self._store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
 			local Data = Result:GetCurrentPage() :: {any};
 			return Map(Data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 		end;
@@ -243,7 +243,7 @@ function Board:Get(amount, sortDirection)
 
 	return Promise.try(RetrieveTopData)
 	:andThen(function(data)
-		dPrint(`Successfully retrieved top data for {self.__serviceKey}`, data);
+		dPrint(`Successfully retrieved top data for {self._serviceKey}`, data);
 		return data;
 	end)
 	:catch(function(Error)
@@ -266,14 +266,14 @@ function Board:Update(userId, value)
 	SmartAssert(type(value) == "function" or type(value) == "number", "Transformer must be a function or a number");
 
 	-- If we are using a MemoryStore, we can just update the data
-	if (self.__storeType == "MemoryStore") then
-		dPrint(`Successfully updated data for ${userId} in {self.__serviceKey}`);
-		return self.__store:Set(userId, value);
+	if (self._storeType == "MemoryStore") then
+		dPrint(`Successfully updated data for ${userId} in {self._serviceKey}`);
+		return self._store:Set(userId, value);
 	end;
 
 	-- Using an actual DataStore, we need to set the data
 	return Promise.retryWithVariableDelay(function()
-		return self.__store:UpdateAsync(userId, function(oldValue)
+		return self._store:UpdateAsync(userId, function(oldValue)
 			oldValue = oldValue and Compression.Decompress(oldValue) or 0;
 			local transformedValue = (type(value) == "function") and value(oldValue) or value;
 
@@ -297,7 +297,7 @@ end
 ]=]
 function Board:Destroy()
 	-- Destroy the threads
-	for _, thread in self.__threads do
+	for _, thread in self._threads do
 		if (typeof(thread) == "thread") then
 			task.cancel(thread);
 		end;
