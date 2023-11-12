@@ -6,8 +6,8 @@
 
 [![CI](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml)
 [![DocsBuild](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml)
-<!-- This should be Release -->
 [![DocsPublish](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment)
+<!-- This should be Release -->
 
 
 
