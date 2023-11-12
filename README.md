@@ -1,7 +1,7 @@
-<div align="center">
+<div align="center" display="inline-block">
   <h1>Leaderboard</h1>
 
-  <table style="display: inline-block !important;" >
+  <table display="inline-block">
     <thead>
       <tr>
         <th>Status</th>
