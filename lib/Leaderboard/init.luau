@@ -64,7 +64,7 @@ export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearl
 
 --[=[
 	@within Leaderboard
-	@type LeaderboardTypeArgument {LeaderboardType: string}
+	@type LeaderboardTypeArgument {[LeaderboardType]: any}
 ]=]
 export type LeaderboardTypeArgument = {
 	[LeaderboardType]: any,
