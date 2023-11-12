@@ -1,12 +1,16 @@
 --[=[
     @within Logger
     @interface Object
+    @field __index Object
     @field new (moduleName: string, debugEnabled: boolean) -> Logger
     @field Log (self: Logger, logLevel: number, message: string) -> ()
+    @field Destroy (self: Logger) -> ()
 ]=]
 type Object = {
+    __index: Object,
     new: (moduleName: string, debugEnabled: boolean) -> Logger,
     Log: (self: Logger, logLevel: number, message: string) -> (),
+    Destroy: (self: Logger) -> (),
 }
 
 --[=[
@@ -66,7 +70,17 @@ function Logger:Log(logLevel, message)
     end;
 end
 
+--[=[
+    @return nil
+
+    Destroys the Logger.
+]=]
+function Logger:Destroy()
+    setmetatable(self, nil);
+end
+
 return table.freeze({
     Log = Logger.Log,
     new = Logger.new,
+    Destroy = Logger.Destroy,
 })

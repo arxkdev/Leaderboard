@@ -1,3 +1,5 @@
+local HttpService = game:GetService("HttpService");
+
 -- Requirements
 local Compression = require(script.Compression);
 local Sha1 = require(script.Sha1);
@@ -8,14 +10,9 @@ local Util = {};
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 24 * 60 * 60 * 45;
 local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime"};
 local DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-local FALLBACK_EXPIRY_TIMES = {
-	["Hourly"] = 3600,
-	["Daily"] = 24 * 3600,
-	["Weekly"] = 7 * 24 * 3600,
-	["Monthly"] = (GetDaysInMonth()) * 24 * 3600, -- Used to have it as 30, but that's not accurate, so we use GetDaysInMonth()
-}
 
-function GetDaysInMonth(): number
+
+local function GetDaysInMonth(): number
 	local CurrentDate = DateTime.now():ToUniversalTime();
 	local Month, Year = CurrentDate.Month, CurrentDate.Year;
 	if (Month == 2) then -- This is for a leap year
@@ -65,6 +62,10 @@ local function KeysInDictionary(dictionary: {any}): {any}
 	return keys;
 end
 
+local function GenerateGUID(): string
+	return HttpService:GenerateGUID(false);
+end
+
 Util.SmartAssert = SmartAssert;
 Util.Map = Map;
 Util.FoundInTable = FoundInTable;
@@ -72,9 +73,15 @@ Util.GetDaysInMonth = GetDaysInMonth;
 Util.KeysInDictionary = KeysInDictionary;
 Util.Compression = Compression;
 Util.Sha1 = Sha1;
+Util.GenerateGUID = GenerateGUID;
 Util.BOARD_TYPES = BOARD_TYPES;
 Util.MEMORY_STORE_SERVICE_MAX_EXPIRY = MEMORY_STORE_SERVICE_MAX_EXPIRY;
-Util.FALLBACK_EXPIRY_TIMES = FALLBACK_EXPIRY_TIMES;
+Util.FALLBACK_EXPIRY_TIMES = {
+	["Hourly"] = 3600,
+	["Daily"] = 24 * 3600,
+	["Weekly"] = 7 * 24 * 3600,
+	["Monthly"] = (GetDaysInMonth()) * 24 * 3600, -- Used to have it as 30, but that's not accurate, so we use GetDaysInMonth()
+}
 
 return Util :: {
 	SmartAssert: (boolean, string) -> ();
@@ -84,6 +91,7 @@ return Util :: {
 	Compression: typeof(Compression);
 	KeysInDictionary: ({any}) -> {any};
 	Sha1: typeof(Sha1);
+	GenerateGUID: () -> string;
 	BOARD_TYPES: {string};
 	MEMORY_STORE_SERVICE_MAX_EXPIRY: number;
 	FALLBACK_EXPIRY_TIMES: {[string]: number};

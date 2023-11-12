@@ -17,6 +17,8 @@ local Logger = require(script.Parent.Logger);
 local Compression = Util.Compression;
 local SmartAssert = Util.SmartAssert;
 local Map = Util.Map;
+local Cancel = task.cancel;
+local Spawn = task.spawn;
 
 -- Constants
 local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
@@ -105,26 +107,26 @@ local Board: Object = {} :: Object;
 Board.__index = Board;
 
 local function GetUserInfosFromId(userId: number | string): (string, string)
-	if (typeof(userId) == "string") then
-		userId = tonumber(userId);
-	end;
+	SmartAssert(userId ~= nil, "UserId cannot be nil");
+	SmartAssert(type(userId) == "number" or type(userId) == "string", "UserId must be a number or a string");
+	local newUserId = tonumber(userId or 0);
 
 	-- First, check if the cache contains the name
-	if (UserIdsCache[userId]) then
-		local Username, DisplayName = unpack(UserIdsCache[userId]);
+	if (UserIdsCache[newUserId]) then
+		local Username, DisplayName = unpack(UserIdsCache[newUserId]);
 		return Username, DisplayName;
 	end;
 
 	-- Second, check if the user is already connected to the server
-	local player = Players:GetPlayerByUserId(userId);
+	local player = Players:GetPlayerByUserId(newUserId);
 	if (player) then
-		UserIdsCache[userId] = {player.Name, player.DisplayName};
+		UserIdsCache[newUserId] = {player.Name, player.DisplayName};
 		return player.Name, player.DisplayName;
 	end;
 
 	-- If all else fails, send a request
 	local Success, Result = pcall(function()
-		return UserService:GetUserInfosByUserIdsAsync({userId});
+		return UserService:GetUserInfosByUserIdsAsync({newUserId});
 	end);
 	if (not Success) then
 		warn(`Leaderboard had trouble getting user info: {Result}`);
@@ -132,7 +134,7 @@ local function GetUserInfosFromId(userId: number | string): (string, string)
 	end;
 	local Username = Result[1] and Result[1].Username or "Unknown";
 	local DisplayName = Result[1] and Result[1].DisplayName or "Unknown";
-	UserIdsCache[userId] = {Username, DisplayName};
+	UserIdsCache[newUserId] = {Username, DisplayName};
 	return Username, DisplayName;
 end
 
@@ -190,7 +192,7 @@ function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rolling
 		local initialDate = os.date("*t", os.time());
 		local isLastMinute = false;
 
-		local thread = task.spawn(function()
+		local thread = Spawn(function()
 			while (true) do
 				local currentDate = os.date("*t", os.time());
 				local isNewYear = currentDate.year ~= initialDate.year;
@@ -297,9 +299,20 @@ function Board:Destroy()
 	-- Destroy the threads
 	for _, thread in self._threads do
 		if (typeof(thread) == "thread") then
-			task.cancel(thread);
+			Cancel(thread);
 		end;
 	end;
+
+	-- Destroy the store
+	if (self._storeType == "MemoryStore") then
+		self._store:Destroy();
+	end;
+
+	-- Destroy the logger
+	self.Logger:Destroy();
+
+	-- Destroy the board
+	setmetatable(self, nil);
 end
 
 -- Make indexing the class with the wrong key throw an error

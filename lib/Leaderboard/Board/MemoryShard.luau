@@ -383,6 +383,17 @@ function MemoryShard:Set(userId, value)
 	end, self:_getExpiry() or self._fallbackExpiry):catch(warn);
 end
 
+--[=[
+	@return ()
+	@yields
+
+	Destroys the MemoryShard
+]=]
+function MemoryShard:Destroy()
+	self.Logger:Destroy();
+	setmetatable(self, nil);
+end
+
 -- Make indexing the wrong key throw an error
 setmetatable(MemoryShard, {
 	__index = function(_, key)

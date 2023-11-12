@@ -57,6 +57,6 @@ MoneyLeaderboard.Updated:Connect(function(boards)
 	-- Returns us a table of all the boards that were updated
 	for _, board in boards do
 		print(`Updating board {board.Type} - with {#board.Data} items!`);
-		UpdateBoard(board.Data, workspace.Test2.Leaderboards:FindFirstChild(typeof(board.Type) == "number" and Leaderboards[board.Type] or board.Type));
+		UpdateBoard(board.Data, workspace.Test2.Leaderboards:FindFirstChild(board.Type));
 	end;
 end);

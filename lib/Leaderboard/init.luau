@@ -1,7 +1,6 @@
 --[[
 	Arxk @ 2023
 ]]
-local HttpService = game:GetService("HttpService");
 local Players = game:GetService("Players");
 
 -- Requirements
@@ -14,6 +13,11 @@ local Logger = require(script.Logger);
 -- Variables
 local SmartAssert = Util.SmartAssert;
 local KeysInDictionary = Util.KeysInDictionary;
+local GenerateGUID = Util.GenerateGUID;
+local Spawn = task.spawn;
+local Cancel = task.cancel;
+
+-- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = Util.MEMORY_STORE_SERVICE_MAX_EXPIRY;
 local BOARD_TYPES = Util.BOARD_TYPES;
 
@@ -63,7 +67,7 @@ export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearl
 	@type LeaderboardTypeArgument {LeaderboardType: string}
 ]=]
 export type LeaderboardTypeArgument = {
-	LeaderboardType: string,
+	[LeaderboardType]: any,
 }
 
 --[=[
@@ -72,8 +76,8 @@ export type LeaderboardTypeArgument = {
 	@field Updated Signal<{AllTopData}>
 	@field BoardUpdated Signal<{Type: LeaderboardType, Data: {TopData}}>
 	@field _serviceKey string
-	@field _types {LeaderboardType}
-	@field _boards {LeaderboardType: Board}
+	@field _types LeaderboardTypeArgument
+	@field _boards {[LeaderboardType]: Board}
 	@field _valueQueue ValueQueueType
 	@field _threads {thread}
 	@field _connections {RBXScriptConnection}
@@ -82,8 +86,8 @@ export type LeaderboardArguments = {
 	Updated: Signal.Signal<{AllTopData}>,
 	BoardUpdated: Signal.Signal<{Type: LeaderboardType, Data: {TopData}}>,
 	_serviceKey: string,
-	_types: {LeaderboardType},
-	_boards: {LeaderboardType: Board},
+	_types: LeaderboardTypeArgument,
+	_boards: {[LeaderboardType]: Board},
 	_valueQueue: ValueQueueType,
 	_threads: {thread},
 	_connections: {RBXScriptConnection},
@@ -112,7 +116,7 @@ type ValueQueueType = {
 	@field IncrementValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, amount: number) -> ()
 	@field SetValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
 	@field UpdateStoreValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
-	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
+	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
 	@field SaveValues (self: Leaderboard) -> ()
 	@field Destroy (self: Leaderboard) -> ()
 	@field new (leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, debugMode: boolean?) -> Leaderboard
@@ -122,7 +126,7 @@ type Object = {
 	IncrementValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, amount: number) -> (),
 	SetValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
-	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
+	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	SaveValues: (self: Leaderboard) -> (),
 	Destroy: (self: Leaderboard) -> (),
 	new: (leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, debugMode: boolean?) -> Leaderboard,
@@ -216,7 +220,7 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 	self.BoardUpdated = Signal.new();
 
 	-- Private properties
-	self._serviceKey = HttpService:GenerateGUID(false);
+	self._serviceKey = GenerateGUID();
 	self._types = leaderboardTypes;
 	self._boards = {};
 	self._valueQueue = {};
@@ -234,7 +238,7 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 
 	-- Start automation
 	if (automationSettings and automationSettings.Automation) then
-		local Thread = task.spawn(function()
+		local Thread = Spawn(function()
 			while (true) do
 				-- Update the value from the queue
 				self:SaveValues();
@@ -460,7 +464,7 @@ function Leaderboard:Destroy()
 	-- Cancel all the threads
 	for _, thread in self._threads do
 		if (typeof(thread) == "thread") then
-			task.cancel(thread);
+			Cancel(thread);
 		end;
 	end;
 
@@ -469,16 +473,22 @@ function Leaderboard:Destroy()
 		connection:Disconnect();
 	end;
 
+	-- Logger destroy
+	self.Logger:Destroy();
+
 	-- Remove from leaderboards
 	if (Leaderboards[self._serviceKey]) then
 		Leaderboards[self._serviceKey] = nil;
 	end;
+
+	-- Destroy the metatable
+	setmetatable(self, nil);
 end
 
 -- Bind to close, destroy all the leaderboards
 game:BindToClose(function()
 	for _, leaderboard in Leaderboards do
-		task.spawn(function()
+		Spawn(function()
 			leaderboard:Destroy();
 		end)
 	end;
