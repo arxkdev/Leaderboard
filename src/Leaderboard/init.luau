@@ -20,6 +20,8 @@ local Cancel = task.cancel;
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = Util.MEMORY_STORE_SERVICE_MAX_EXPIRY;
 local BOARD_TYPES = Util.BOARD_TYPES;
+local MAX_OVERALL_LEADERBOARDS = 5; -- Overall, you can only create 5 leaderboards using Leaderboard.new, this is to prevent rate limiting
+local MAX_BOARDS = 7; -- You can only create up to 7 boards per leaderboard
 
 --[=[
 	@within Leaderboard
@@ -200,10 +202,14 @@ end
 function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, debugMode: boolean?)
 	-- Check if the leaderboard types are valid
 	SmartAssert(#KeysInDictionary(leaderboardTypes) > 0, "Leaderboard types must be greater than 0");
+	SmartAssert(#KeysInDictionary(leaderboardTypes) <= MAX_BOARDS, `You can only create up to {MAX_BOARDS} types of leaderboards`);
 	for boardType, boardKey in leaderboardTypes do
 		SmartAssert(IsValidLeaderboardType(boardType, boardKey), `Leaderboard type {boardType} is not valid`);
 		SmartAssert(boardKey ~= "", "Leaderboard key must not be empty");
 	end;
+
+	-- Check if they've exceeded the max leaderboards
+	SmartAssert(#KeysInDictionary(Leaderboards) < MAX_OVERALL_LEADERBOARDS, `You can only create up to {MAX_OVERALL_LEADERBOARDS} leaderboards`);
 
 	-- Asserts for settings
 	if (automationSettings) then
@@ -454,7 +460,7 @@ end
 ]=]
 function Leaderboard:Destroy()
 	-- Update the value from the queue
-	self:SaveValues();
+	-- self:SaveValues();
 
 	-- Destroy all the boards
 	for _, board in self._boards do

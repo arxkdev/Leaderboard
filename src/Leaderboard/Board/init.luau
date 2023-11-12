@@ -23,9 +23,9 @@ local Spawn = task.spawn;
 -- Constants
 local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
 	["Hourly"] = 1,
-	["Daily"] = 3,
-	["Weekly"] = 10,
-	["Monthly"] = 15,
+	["Daily"] = 2,
+	["Weekly"] = 3,
+	["Monthly"] = 5,
 }
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
@@ -45,14 +45,12 @@ export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
 	@within Board
 	@interface BoardArguments
 	@field _serviceKey string
-	@field _type LeaderboardType
 	@field _storeUsing string
 	@field _store MemoryStoreSortedMap | OrderedDataStore | MemoryShard
 	@field _threads {thread}
 ]=]
 export type BoardArguments = {
 	_serviceKey: string,
-	_type: LeaderboardType,
 	_storeUsing: string,
 	_store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
 	_threads: {thread},
@@ -110,32 +108,33 @@ local function GetUserInfosFromId(userId: number | string): (string, string)
 	SmartAssert(userId ~= nil, "UserId cannot be nil");
 	SmartAssert(type(userId) == "number" or type(userId) == "string", "UserId must be a number or a string");
 	local newUserId = tonumber(userId or 0);
+	return tostring(newUserId), tostring(newUserId);
 
 	-- First, check if the cache contains the name
-	if (UserIdsCache[newUserId]) then
-		local Username, DisplayName = unpack(UserIdsCache[newUserId]);
-		return Username, DisplayName;
-	end;
+	-- if (UserIdsCache[newUserId]) then
+	-- 	local Username, DisplayName = unpack(UserIdsCache[newUserId]);
+	-- 	return Username, DisplayName;
+	-- end;
 
-	-- Second, check if the user is already connected to the server
-	local player = Players:GetPlayerByUserId(newUserId);
-	if (player) then
-		UserIdsCache[newUserId] = {player.Name, player.DisplayName};
-		return player.Name, player.DisplayName;
-	end;
+	-- -- Second, check if the user is already connected to the server
+	-- local player = Players:GetPlayerByUserId(newUserId);
+	-- if (player) then
+	-- 	UserIdsCache[newUserId] = {player.Name, player.DisplayName};
+	-- 	return player.Name, player.DisplayName;
+	-- end;
 
-	-- If all else fails, send a request
-	local Success, Result = pcall(function()
-		return UserService:GetUserInfosByUserIdsAsync({newUserId});
-	end);
-	if (not Success) then
-		warn(`Leaderboard had trouble getting user info: {Result}`);
-		return "Unknown", "Unknown";
-	end;
-	local Username = Result[1] and Result[1].Username or "Unknown";
-	local DisplayName = Result[1] and Result[1].DisplayName or "Unknown";
-	UserIdsCache[newUserId] = {Username, DisplayName};
-	return Username, DisplayName;
+	-- -- If all else fails, send a request
+	-- local Success, Result = pcall(function()
+	-- 	return UserService:GetUserInfosByUserIdsAsync({newUserId});
+	-- end);
+	-- if (not Success) then
+	-- 	warn(`Leaderboard had trouble getting user info: {Result}`);
+	-- 	return "Unknown", "Unknown";
+	-- end;
+	-- local Username = Result[1] and Result[1].Username or "Unknown";
+	-- local DisplayName = Result[1] and Result[1].DisplayName or "Unknown";
+	-- UserIdsCache[newUserId] = {Username, DisplayName};
+	-- return Username, DisplayName;
 end
 
 local function Transform(rank: number, key: number, value: number): TopData
@@ -230,8 +229,8 @@ function Board:Get(amount, sortDirection)
 
 	local function RetrieveTopData()
 		if (self._storeType == "MemoryStore") then
-			local Data = self._store:Get(amount, sortDirection);
-			return Data:andThen(function(data)
+			return self._store:Get(amount, sortDirection):andThen(function(data)
+				print(self._serviceKey, data)
 				return Map(data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 			end);
 		else

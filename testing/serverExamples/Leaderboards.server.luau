@@ -8,17 +8,21 @@ local Leaderboard = require(Lib.Leaderboard);
 type TopData = {Leaderboard.TopData};
 
 -- Constants
-local Key = 1;
+local Key = 2;
 local Leaderboards = {
 	["Hourly"] = `Hourly-{Key}`,
 	["Daily"] = `Daily-{Key}`,
 	["Weekly"] = `Weekly-{Key}`,
 	["Monthly"] = `Monthly-{Key}`,
 	["AllTime"] = `AllTime-{Key}`,
+
+	-- Test for rolling
+	-- ["10MinutesRolling"] = {60 * 10, `10MinutesRolling-{Key}`}, -- 10 minutes rolling leaderboard
+	-- ["15MinutesRolling"] = {60 * 15, `15MinutesRolling-{Key}`}, -- 15 minutes rolling leaderboard
 };
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
-	Interval = 25,
+	Interval = 120,
 	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 });
 
@@ -52,18 +56,20 @@ local function IncrementMoneyTest()
 	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId2, 100);
 
 	-- Larger scale test
-	for i = 2000, 2200 do
-		MoneyLeaderboard:IncrementValues(Leaderboards, i, math.random(1, 1500));
+	for _ = 1, 5 do
+		MoneyLeaderboard:IncrementValues(Leaderboards, math.random(1, 10000000), math.random(1, 1500));
 	end;
 end
 
-Players.PlayerAdded:Connect(IncrementMoneyTest);
 MoneyLeaderboard.Updated:Connect(function(boards)
 	-- Returns us a table of all the boards that were updated
 	for _, board in boards do
 		print(`Updating board {board.Type} - with {#board.Data} items!`);
 		UpdateBoard(board.Data, workspace.Test1.Leaderboards[board.Type]);
 	end;
+
+	-- Increment
+	IncrementMoneyTest();
 end);
 -- MoneyLeaderboard.BoardUpdated:Connect(function(board)
 -- 	print(board.Type, board.Data);

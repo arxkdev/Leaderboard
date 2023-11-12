@@ -122,6 +122,12 @@ function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, s
 	return self;
 end
 
+--[=[
+	@private
+	@return number | nil
+
+	Gets the expiry for a specific leaderboard type and key
+]=]
 function MemoryShard:_getExpiry()
 	if (self._isRollingExpiry) then
 		-- rolling expiry is dynamic so we can't return a fixed value
@@ -278,7 +284,7 @@ function MemoryShard:Get(topAmount, sortDirection)
 		return function()
 			local data = shard:GetRangeAsync(
 				Enum.SortDirection[sortDirection],
-				topAmount
+				100
 			)
 			if (self._isRollingExpiry) then
 				for _, record in data do
