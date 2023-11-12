@@ -14,7 +14,7 @@ organizationName = "arxkdev"
 projectName = "Leaderboard"
 url = "https://arxk.io"
 baseUrl = "/Leaderboard/"
-tagline = "Global leaderboards with 5 lines of code."
+tagline = "Create and manage timed Global Leaderboards with ease."
 
 [home]
 enabled = true

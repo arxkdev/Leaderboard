@@ -14,10 +14,8 @@ local Logger = require(script.Logger);
 -- Variables
 local SmartAssert = Util.SmartAssert;
 local KeysInDictionary = Util.KeysInDictionary;
-
--- Constants
-local MEMORY_STORE_SERVICE_MAX_EXPIRY = 24 * 60 * 60 * 45;
-local BOARD_TYPES = {"Hourly", "Daily", "Weekly", "Monthly", "Yearly", "AllTime"};
+local MEMORY_STORE_SERVICE_MAX_EXPIRY = Util.MEMORY_STORE_SERVICE_MAX_EXPIRY;
+local BOARD_TYPES = Util.BOARD_TYPES;
 
 --[=[
 	@within Leaderboard

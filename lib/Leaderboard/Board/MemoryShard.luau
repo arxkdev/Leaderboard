@@ -12,14 +12,7 @@ local SmartAssert = Util.SmartAssert;
 local FoundInTable = Util.FoundInTable;
 local GetDaysInMonth = Util.GetDaysInMonth;
 local Sha1 = Util.Sha1;
-
--- Constants
-local FALLBACK_EXPIRY_TIMES = {
-	["Hourly"] = 3600,
-	["Daily"] = 24 * 3600,
-	["Weekly"] = 7 * 24 * 3600,
-	["Monthly"] = (GetDaysInMonth()) * 24 * 3600, -- Used to have it as 30, but that's not accurate, so we use GetDaysInMonth()
-}
+local FALLBACK_EXPIRY_TIMES = Util.FALLBACK_EXPIRY_TIMES;
 
 --[=[
     @within MemoryShard
@@ -288,7 +281,7 @@ function MemoryShard:Get(topAmount, sortDirection)
 				topAmount
 			)
 			if (self._isRollingExpiry) then
-				for _, record in ipairs(data) do
+				for _, record in data do
 					-- get rid of expiry and creation date padding, convert back to number
 					record.value = tonumber(record.value.value);
 				end;
@@ -301,7 +294,7 @@ function MemoryShard:Get(topAmount, sortDirection)
 	local Promises = {};
 	for _, Shard in self._shards do
 		local ShardPromise = Promise.retryWithVariableDelay(ProcessShard(Shard), 10, 1, "Exponential"):andThen(function(Result)
-			for _, record in ipairs(Result) do
+			for _, record in Result do
 				ProcessRecord(record);
 			end;
 		end):catch(warn);
