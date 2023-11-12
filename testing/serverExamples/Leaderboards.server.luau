@@ -22,7 +22,7 @@ local Leaderboards = {
 };
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
-	Interval = 25,
+	Interval = 55,
 	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 });
 

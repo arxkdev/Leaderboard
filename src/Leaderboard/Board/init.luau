@@ -145,6 +145,10 @@ local function Transform(rank: number, key: number, value: number): TopData
 	};
 end
 
+local function GetRequestBudget(typeOfBudget: Enum.DataStoreRequestType): number
+	return DataStoreService:GetRequestBudgetForRequestType(typeOfBudget);
+end
+
 -- local function ShardCalculation(rollingExpiry: number): number
 -- 	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
 -- 	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
@@ -234,6 +238,11 @@ function Board:Get(amount, sortDirection)
 				return Map(data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 			end);
 		else
+			local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
+			if (RequestBudget < 1) then
+				warn(`Skipping getting top data for {self._serviceKey} due to insufficient budget`);
+				return {};
+			end;
 			local Result = self._store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
 			local Data = Result:GetCurrentPage() :: {any};
 			return Map(Data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
@@ -268,6 +277,12 @@ function Board:Update(userId, value)
 	if (self._storeType == "MemoryStore") then
 		self._logger:Log(1, `Successfully updated data for ${userId} in {self._serviceKey}`);
 		return self._store:Set(userId, value);
+	end;
+
+	local Budget = GetRequestBudget(Enum.DataStoreRequestType.UpdateAsync);
+	if (Budget < 1) then
+		warn(`Skipping updating data for {userId} in {self._serviceKey} due to insufficient budget`);
+		return false;
 	end;
 
 	-- Using an actual DataStore, we need to set the data
