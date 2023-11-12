@@ -9,9 +9,13 @@
 
 <br />
 
+<center>
+
 [![CI](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml)
 [![DocsBuild](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml)
 [![DocsPublish](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment)
+
+</center>
 
 ## Why you should use Leaderboard
 
