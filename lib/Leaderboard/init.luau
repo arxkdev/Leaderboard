@@ -9,6 +9,7 @@ local Util = require(script.Util);
 local Signal = require(script.Signal);
 local Promise = require(script.Promise);
 local Board = require(script.Board);
+local Logger = require(script.Logger);
 
 -- Variables
 local SmartAssert = Util.SmartAssert;
@@ -88,6 +89,7 @@ export type LeaderboardArguments = {
 	_valueQueue: ValueQueueType,
 	_threads: {thread},
 	_connections: {RBXScriptConnection},
+	Logger: Logger.Logger?,
 }
 
 --[=[
@@ -115,7 +117,7 @@ type ValueQueueType = {
 	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
 	@field SaveValues (self: Leaderboard) -> ()
 	@field Destroy (self: Leaderboard) -> ()
-	@field new (leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?) -> Leaderboard
+	@field new (leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, debugMode: boolean?) -> Leaderboard
 ]=]
 type Object = {
 	__index: Object,
@@ -125,7 +127,7 @@ type Object = {
 	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	SaveValues: (self: Leaderboard) -> (),
 	Destroy: (self: Leaderboard) -> (),
-	new: (leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?) -> Leaderboard,
+	new: (leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, debugMode: boolean?) -> Leaderboard,
 }
 
 type Board = Board.Board;
@@ -188,11 +190,12 @@ end
 --[=[
 	@param leaderboardTypes LeaderboardTypeArgument
 	@param automationSettings AutomationSettings?
+	@param debugMode boolean?
 	@return Leaderboard
 
 	Constructs a new leaderboard.
 ]=]
-function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?)
+function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, debugMode: boolean?)
 	-- Check if the leaderboard types are valid
 	SmartAssert(#KeysInDictionary(leaderboardTypes) > 0, "Leaderboard types must be greater than 0");
 	for boardType, boardKey in leaderboardTypes do
@@ -221,13 +224,14 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 	self._valueQueue = {};
 	self._threads = {};
 	self._connections = {};
+	self.Logger = Logger.new("Leaderboard", debugMode or false);
 
 	-- Add to leaderboards
 	Leaderboards[self._serviceKey] = self;
 
 	-- Initialize boards
 	for boardType, boardKey in leaderboardTypes do
-		self._boards[boardType] = Board.new(typeof(boardKey) == "table" and boardKey[2] or boardKey, boardType, typeof(boardKey) == "table" and boardKey[1] or nil);
+		self._boards[boardType] = Board.new(typeof(boardKey) == "table" and boardKey[2] or boardKey, boardType, typeof(boardKey) == "table" and boardKey[1] or nil, debugMode);
 	end;
 
 	-- Start automation
