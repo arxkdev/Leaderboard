@@ -343,6 +343,7 @@ function MemoryShard:Set(userId, value)
 	if (LeaderboardType == "Rolling") then
 		return self:_getAsync(userId):andThen(function(oldValue)
 			local firstTime = oldValue == nil;
+			local created = if not firstTime then oldValue._created else nil
 			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value);
 			local transformedValue = (typeof(value) == "function" and value(oldValue) or value);
 
@@ -353,12 +354,13 @@ function MemoryShard:Set(userId, value)
 
 			local compressedValue = Compression.Compress(transformedValue);
 			local newSortKey = transformedValue;
-
+			
 			local newValue = {
 				value = compressedValue, -- this will be the value we save, we need to save as table to carry over creation data
-				_created = if (typeof(oldValue) ~= "table") then os.time() else oldValue._created,
+				_created = if firstTime then os.time() else created,
 				_expiry = self._fallbackExpiry
 			};
+			
 			-- update the value with appropriate expiry time left
 			self:_setAsync(userId, newValue, newValue._expiry - (os.time() - newValue._created), newSortKey):catch(warn);
 			return true;
