@@ -36,7 +36,7 @@ description = "Leaderboard is a lightweight performance friendly library that is
 
 [[classOrder]]
 section = "Leaderboard"
-classes = ["Leaderboard", "Board", "MemoryShard"]
+classes = ["Leaderboard", "Board", "MemoryShard", "Logger"]
 
 [[classOrder]]
 section = "Util"
