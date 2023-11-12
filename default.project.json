@@ -4,8 +4,8 @@
     "$className": "DataModel",
 
     "ReplicatedStorage": {
-      "lib": {
-        "$path": "lib"
+      "src": {
+        "$path": "src"
       }
     },
 

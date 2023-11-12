@@ -2,7 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage");
 local Players = game:GetService("Players");
 
 local LeaderboardTemplate = ReplicatedStorage:WaitForChild("LeaderboardTemplate");
-local Lib = ReplicatedStorage:WaitForChild("lib");
+local Lib = ReplicatedStorage:WaitForChild("src");
 local Leaderboard = require(Lib.Leaderboard);
 
 type TopData = {Leaderboard.TopData};
