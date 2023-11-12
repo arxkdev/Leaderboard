@@ -18,7 +18,7 @@ local Leaderboards = {
 };
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
-	Interval = 15,
+	Interval = 25,
 	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 });
 
@@ -50,6 +50,11 @@ local function IncrementMoneyTest()
 	local FakeId1, FakeId2 = 100, 101;
 	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId1, 100);
 	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId2, 100);
+
+	-- Larger scale test
+	for i = 2000, 2200 do
+		MoneyLeaderboard:IncrementValues(Leaderboards, i, math.random(1, 1500));
+	end;
 end
 
 Players.PlayerAdded:Connect(IncrementMoneyTest);
