@@ -1,12 +1,14 @@
 <h1 align="center">Leaderboard</h1>
 
+<div align="center">
 
-<center>
+CI Status: 
+[![Lint](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml)
 
-| Status | Badge |
-| ------ | ------ |
-| CI Status | ![CI](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml/badge.svg) |
-| Documentation Deployment Status | ![DocDeployStatus](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml/badge.svg) |
-| Documentation Deployment | ![DocDeployment](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment/badge.svg) |
+Documentation Build Status: 
+[![Documentation](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml)
 
-</center>
+Documentation Publish Status: 
+[![Published](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment)
+
+</div>
