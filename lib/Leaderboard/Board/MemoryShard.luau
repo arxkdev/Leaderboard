@@ -4,6 +4,7 @@ local MemoryStoreService = game:GetService("MemoryStoreService");
 local Leaderboard = script.Parent.Parent;
 local Util = require(Leaderboard.Util);
 local Promise = require(Leaderboard.Promise);
+local Logger = require(Leaderboard.Logger);
 
 -- Variables
 local Compression = Util.Compression;
@@ -19,7 +20,6 @@ local FALLBACK_EXPIRY_TIMES = {
 	["Weekly"] = 7 * 24 * 3600,
 	["Monthly"] = (GetDaysInMonth()) * 24 * 3600, -- Used to have it as 30, but that's not accurate, so we use GetDaysInMonth()
 }
-local DEBUG = false;
 
 --[=[
     @within MemoryShard
@@ -76,7 +76,7 @@ export type TopData = {
 	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: MemoryShard) -> ()
-	@field new (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?) -> MemoryShard
+	@field new (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard
 ]=]
 type Object = {
 	__index: Object,
@@ -87,7 +87,7 @@ type Object = {
 	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: MemoryShard) -> (),
-	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?) -> MemoryShard,
+	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard,
 }
 
 --[=[
@@ -97,12 +97,6 @@ type Object = {
 ]=]
 local MemoryShard: Object = {} :: Object;
 MemoryShard.__index = MemoryShard;
-
-local function dPrint(...)
-	if (DEBUG) then
-		warn(`[Shards]`, ...);
-	end;
-end
 
 local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	if (leaderboardType == "Rolling") then
@@ -154,20 +148,23 @@ end
 	@param leaderboardType LeaderboardType
 	@param serviceKey string
 	@param shardCount number
+	@param rollingExpiry number?
+	@param debugMode boolean?
 
 	Creates a new MemoryShard
 ]=]
-function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?)
+function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?)
 	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
 	self._shards = {};
 	self._shardCount = shardCount;
 	self._type = leaderboardType;
 	self._fallbackExpiry = (rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self._type];
+	self.Logger = Logger.new("MemoryShard", debugMode or false);
 
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
 		self._shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
-		dPrint(`Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
+		self.Logger:Log(1, `Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
 	end;
 
 	return self;
@@ -260,19 +257,19 @@ function MemoryShard:Get(topAmount, sortDirection)
 	SmartAssert(typeof(sortDirection) == "string", "sortDirection must be a string");
 	local CombinedResults = {};
 
-	local function ProcessEntry(entry: {key: string, value: number})
-		local IndexFound, Found = FoundInTable(CombinedResults, tonumber(entry.key));
+	local function ProcessRecord(record: {key: string, value: number})
+		local IndexFound, Found = FoundInTable(CombinedResults, tonumber(record.key));
 		if (Found) then
-			local FoundValueHigherThanCurrent = (Found.value > entry.value);
+			local FoundValueHigherThanCurrent = (Found.value > record.value);
 			if (not FoundValueHigherThanCurrent) then
 				-- The found value already there, is LOWER than this new one, update it
-				CombinedResults[IndexFound].value = entry.value;
+				CombinedResults[IndexFound].value = record.value;
 			end;
 		else
 			-- There is no found value, add it to the combined results
 			table.insert(CombinedResults, {
-				key = tonumber(entry.key),
-				value = entry.value
+				key = tonumber(record.key),
+				value = record.value
 			});
 		end;
 	end
@@ -284,9 +281,9 @@ function MemoryShard:Get(topAmount, sortDirection)
 				topAmount
 			)
 			if (self._type == "Rolling") then
-				for _, entry in ipairs(data) do
+				for _, record in ipairs(data) do
 					-- get rid of expiry and creation date padding, convert back to number
-					entry.value = tonumber(entry.value.value);
+					record.value = tonumber(record.value.value);
 				end;
 			end;
 			return data;
@@ -297,8 +294,8 @@ function MemoryShard:Get(topAmount, sortDirection)
 	local Promises = {};
 	for _, Shard in self._shards do
 		local ShardPromise = Promise.retryWithVariableDelay(ProcessShard(Shard), 10, 1, "Exponential"):andThen(function(Result)
-			for _, entry in ipairs(Result) do
-				ProcessEntry(entry);
+			for _, record in ipairs(Result) do
+				ProcessRecord(record);
 			end;
 		end):catch(warn);
 		table.insert(Promises, ShardPromise);

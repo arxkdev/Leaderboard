@@ -11,6 +11,7 @@ local Players = game:GetService("Players");
 local MemoryShard = require(script.MemoryShard);
 local Promise = require(script.Parent.Promise);
 local Util = require(script.Parent.Util);
+local Logger = require(script.Parent.Logger);
 
 -- Variables
 local Compression = Util.Compression;
@@ -24,7 +25,6 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 	["Weekly"] = 10,
 	["Monthly"] = 15,
 }
-local DEBUG = false;
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
 --[=[
@@ -54,6 +54,7 @@ export type BoardArguments = {
 	_storeUsing: string,
 	_store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
 	_threads: {thread},
+	Logger: Logger.Logger?,
 }
 
 --[=[
@@ -82,14 +83,14 @@ type MemoryShard = MemoryShard.MemoryShard;
 	@field Update (self: Board, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: Board) -> ()
-	@field new (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board
+	@field new (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?) -> Board
 ]=]
 type Object = {
 	__index: Object,
 	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Board) -> (),
-	new: (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?) -> Board,
+	new: (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?) -> Board,
 }
 
 -- Start
@@ -102,12 +103,6 @@ local UserIdsCache = {}; -- To assign userids {username, displayName}
 ]=]
 local Board: Object = {} :: Object;
 Board.__index = Board;
-
-local function dPrint(...)
-	if (DEBUG) then
-		warn(`[Leaderboard]`, ...);
-	end;
-end
 
 local function GetUserInfosFromId(userId: number | string): (string, string)
 	if (typeof(userId) == "string") then
@@ -175,16 +170,19 @@ end
 --[=[
 	@param serviceKey string
 	@param leaderboardType LeaderboardType
+	@param rollingExpiry number?
+	@param debugMode boolean?
 	@return Board
 
 	Creates a new board within the Leaderboard.
 ]=]
-function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): Board
+function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?): Board
 	local self = setmetatable({} :: BoardArguments, Board);
 
 	self._serviceKey = serviceKey;
 	self._storeType, self._store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
 	self._threads = {};
+	self.Logger = Logger.new(`Board-{serviceKey}`, debugMode or false);
 
 	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
 	-- Ty Proxus for writing this
@@ -243,7 +241,7 @@ function Board:Get(amount, sortDirection)
 
 	return Promise.try(RetrieveTopData)
 	:andThen(function(data)
-		dPrint(`Successfully retrieved top data for {self._serviceKey}`, data);
+		self.Logger:Log(1, `Successfully retrieved top data for {self._serviceKey}`, data);
 		return data;
 	end)
 	:catch(function(Error)
@@ -267,7 +265,7 @@ function Board:Update(userId, value)
 
 	-- If we are using a MemoryStore, we can just update the data
 	if (self._storeType == "MemoryStore") then
-		dPrint(`Successfully updated data for ${userId} in {self._serviceKey}`);
+		self.Logger:Log(1, `Successfully updated data for ${userId} in {self._serviceKey}`);
 		return self._store:Set(userId, value);
 	end;
 
