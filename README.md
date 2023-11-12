@@ -1,7 +1,6 @@
 
 <!-- DocsPublish should be Release -->
 
-
 <div align="center">
 	<h1>Leaderboard</h1>
 	<a href="https://arxk.io/Leaderboard/"><strong>View docs</strong></a>
@@ -26,3 +25,5 @@ Roblox developers often face challenges when implementing global leaderboards, p
 - **Simplified Setup**: Streamline the creation of global leaderboards, eliminating the need for complex and time-consuming implementations. The library's design prioritizes ease of use and efficiency.
 
 - **Efficient Memory Management**: Leaderboard leverages MemoryStore to surpass the limitations of OrderedDataStores. It features flexible rate limits and automatic data expiration, eliminating the need to create new stores for each time period.
+
+

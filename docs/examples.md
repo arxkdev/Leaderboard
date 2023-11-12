@@ -6,9 +6,9 @@ sidebar_position: 3
 
 ### Automated Example:
 ```lua
-local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard)
+local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard);
 
-local Key = 1 -- The key for the leaderboard (change to reset)
+local Key = 1; -- The key for the leaderboard (change to reset)
 local LeaderboardTypes = { -- You must provide keys for the individual boards
 	["Hourly"] = `Hourly-{Key}`,
 	["Daily"] = `Daily-{Key}`,
@@ -39,12 +39,12 @@ end)
 
 ### Non-Automated Example:
 ```lua
-local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard)
+local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard);
 
 local INTERVAL = 120; -- 2 minutes
 local RECORD_COUNT = 100; -- Amount of records to get per board
 
-local Key = 1 -- The key for the leaderboard (change to reset)
+local Key = 1; -- The key for the leaderboard (change to reset)
 local LeaderboardTypes = { -- You must provide keys for the individual boards
     ["Hourly"] = `Hourly-{Key}`,
     ["Daily"] = `Daily-{Key}`,
@@ -82,3 +82,35 @@ task.spawn(function()
     end;
 end)
 ```
+
+### Rolling Leaderboard Example:
+```lua
+local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard);
+
+local Key = 1; -- The key for the leaderboard (change to reset)
+local Leaderboards = {
+	["AllTime"] = `AllTime-{Key}`,
+    ["10MinutesRolling"] = {60 * 10, `10MinutesRolling-{Key}`}, -- 10 minutes rolling leaderboard
+	["15MinutesRolling"] = {60 * 15, `15MinutesRolling-{Key}`}, -- 15 minutes rolling leaderboard
+    ["1MinuteRolling"] = {60, `1MinuteRolling-{Key}`}, -- 1 minute rolling leaderboard
+};
+local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
+	Automation = true,
+	Interval = 15,
+	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
+});
+
+local function IncrementMoneyTest()
+	-- Test userIds
+	local FakeId1, FakeId2 = 100, 101;
+	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId1, 100);
+	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId2, 100);
+end
+IncrementMoneyTest();
+
+MoneyLeaderboard.Updated:Connect(function(boards)
+	-- Returns us a table of all the boards that were updated
+	for _, board in boards do
+		print(`Updating board {board.Type} - with {#board.Data} items!`);
+	end;
+end);
