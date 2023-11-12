@@ -3,15 +3,12 @@
 	<a href="https://arxk.io/Leaderboard/"><strong>View docs</strong></a>
 </div>
 
-<div align="center">
 
 [![CI](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml)
-
 [![DocsBuild](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml)
-
 <!-- This should be Release -->
 [![DocsPublish](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment)
-</div>
+
 
 
 ## Why you should use Leaderboard
