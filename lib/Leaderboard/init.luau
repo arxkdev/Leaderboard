@@ -14,7 +14,6 @@ local Logger = require(script.Logger);
 -- Variables
 local SmartAssert = Util.SmartAssert;
 local KeysInDictionary = Util.KeysInDictionary;
-local isLeaderboardTypeRolling = Util.isLeaderboardTypeRolling;
 
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = 24 * 60 * 60 * 45;
