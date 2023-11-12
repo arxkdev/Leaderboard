@@ -71,9 +71,9 @@ MoneyLeaderboard.Updated:Connect(function(boards)
 	-- Increment
 	IncrementMoneyTest();
 end);
--- MoneyLeaderboard.BoardUpdated:Connect(function(board)
--- 	print(board.Type, board.Data);
--- end);
+MoneyLeaderboard.BoardUpdated:Connect(function(board)
+	print(board.Type, board.Data);
+end);
 
 -- local function UpdateLeaderboards()
 -- 	-- Set the stats

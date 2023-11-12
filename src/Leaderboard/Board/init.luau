@@ -231,13 +231,11 @@ function Board:Get(amount, sortDirection)
 	local function RetrieveTopData()
 		if (self._storeType == "MemoryStore") then
 			return self._store:Get(amount, sortDirection):andThen(function(data)
-				print(self._serviceKey, data)
 				return Map(data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 			end);
 		else
 			local Result = self._store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
 			local Data = Result:GetCurrentPage() :: {any};
-			print(#Data)
 			return Map(Data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 		end;
 	end;
