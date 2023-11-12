@@ -34,6 +34,7 @@ export type MemoryShard = typeof(setmetatable({} :: MemoryShardArguments, {} :: 
 	@field _isRollingExpiry boolean
 	@field _shards {MemoryStoreSortedMap}
 	@field _shardCount number
+	@field _logger Logger.Logger?
 ]=]
 export type MemoryShardArguments = {
 	_type: LeaderboardType,
@@ -41,7 +42,7 @@ export type MemoryShardArguments = {
 	_isRollingExpiry: boolean,
 	_shards: {MemoryStoreSortedMap},
 	_shardCount: number,
-	Logger: Logger.Logger?,
+	_logger: Logger.Logger?,
 }
 
 --[=[
@@ -102,7 +103,8 @@ MemoryShard.__index = MemoryShard;
 	@param rollingExpiry number?
 	@param debugMode boolean?
 
-	Creates a new MemoryShard
+	Creates a new MemoryShard. This is not a viable solution anymore, as the limits to MemoryStoreService are too poor.
+	See: https://devforum.roblox.com/t/introducing-memorystore-sortedmap-sortkey-beta/2673559/23
 ]=]
 function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?)
 	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
@@ -111,12 +113,12 @@ function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, s
 	self._type = leaderboardType;
 	self._isRollingExpiry = rollingExpiry ~= nil;
 	self._fallbackExpiry = (rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self._type];
-	self.Logger = Logger.new("MemoryShard", debugMode or false);
+	self._logger = Logger.new("MemoryShard", debugMode or false);
 
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
 		self._shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
-		self.Logger:Log(1, `Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
+		self._logger:Log(1, `Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
 	end;
 
 	return self;
@@ -396,7 +398,7 @@ end
 	Destroys the MemoryShard
 ]=]
 function MemoryShard:Destroy()
-	self.Logger:Destroy();
+	self._logger:Destroy();
 	setmetatable(self, nil);
 end
 

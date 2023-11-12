@@ -4,7 +4,6 @@
 
 -- DataStoreService to handle longer than 42 days (all time most likely)
 local DataStoreService = game:GetService("DataStoreService");
-local UserService = game:GetService("UserService");
 local Players = game:GetService("Players");
 
 -- Requirements
@@ -21,12 +20,12 @@ local Cancel = task.cancel;
 local Spawn = task.spawn;
 
 -- Constants
-local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
-	["Hourly"] = 1,
-	["Daily"] = 2,
-	["Weekly"] = 3,
-	["Monthly"] = 5,
-}
+-- local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
+-- 	["Hourly"] = 1,
+-- 	["Daily"] = 2,
+-- 	["Weekly"] = 3,
+-- 	["Monthly"] = 5,
+-- }
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
 --[=[
@@ -54,7 +53,7 @@ export type BoardArguments = {
 	_storeUsing: string,
 	_store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
 	_threads: {thread},
-	Logger: Logger.Logger?,
+	_logger: Logger.Logger?,
 }
 
 --[=[
@@ -104,65 +103,74 @@ local UserIdsCache = {}; -- To assign userids {username, displayName}
 local Board: Object = {} :: Object;
 Board.__index = Board;
 
-local function GetUserInfosFromId(userId: number | string): (string, string)
+
+local function GetUsernameFromId(userId: number | string): (string)
 	SmartAssert(userId ~= nil, "UserId cannot be nil");
 	SmartAssert(type(userId) == "number" or type(userId) == "string", "UserId must be a number or a string");
 	local newUserId = tonumber(userId or 0);
 
 	-- First, check if the cache contains the name
 	if (UserIdsCache[newUserId]) then
-		local Username, DisplayName = unpack(UserIdsCache[newUserId]);
-		return Username, DisplayName;
+		local Username = unpack(UserIdsCache[newUserId]);
+		return Username;
 	end;
 
 	-- Second, check if the user is already connected to the server
 	local player = Players:GetPlayerByUserId(newUserId);
 	if (player) then
-		UserIdsCache[newUserId] = {player.Name, player.DisplayName};
-		return player.Name, player.DisplayName;
+		UserIdsCache[newUserId] = {player.Name};
+		return player.Name;
 	end;
 
 	-- If all else fails, send a request
 	local Success, Result = pcall(function()
-		return UserService:GetUserInfosByUserIdsAsync({newUserId});
+		return Players:GetNameFromUserIdAsync(newUserId);
 	end);
 	if (not Success) then
 		warn(`Leaderboard had trouble getting user info: {Result}`);
 		return "Unknown", "Unknown";
 	end;
-	local Username = Result[1] and Result[1].Username or "Unknown";
-	local DisplayName = Result[1] and Result[1].DisplayName or "Unknown";
-	UserIdsCache[newUserId] = {Username, DisplayName};
-	return Username, DisplayName;
+	UserIdsCache[newUserId] = {Result};
+	return Result;
 end
 
 local function Transform(rank: number, key: number, value: number): TopData
-	local Username, DisplayName = GetUserInfosFromId(key);
+	local Username = GetUsernameFromId(key);
 	return {
 		Rank = rank,
 		Value = Compression.Decompress(value),
 		UserId = key,
 		Username = Username,
-		DisplayName = DisplayName,
+		DisplayName = "Not supported yet",
 	};
 end
 
-local function ShardCalculation(rollingExpiry: number): number
-	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
-	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
+-- local function ShardCalculation(rollingExpiry: number): number
+-- 	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
+-- 	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
+-- end
+
+local function GetCurrentId(leaderboardType: string)
+	local CurrentHour = DateTime.now():ToUniversalTime().Hour;
+	local CurrentDay = DateTime.now():ToUniversalTime().Day;
+	local CurrentWeek = math.floor(os.date("!*t")["yday"] / 7);
+	local CurrentMonth = DateTime.now():ToUniversalTime().Month;
+	local CurrentYear = DateTime.now():ToUniversalTime().Year;
+
+	return leaderboardType == "Hourly" and CurrentHour or leaderboardType == "Daily" and CurrentDay or leaderboardType == "Weekly" and CurrentWeek or leaderboardType == "Monthly" and CurrentMonth or leaderboardType == "Yearly" and CurrentYear or "AllTime" and "AllTime";
 end
 
-local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
-	if (leaderboardType == "Yearly") then
-		local currentYear = DateTime.now():ToUniversalTime().Year;
-		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{currentYear}:{serviceKey}`);
+local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
+	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
+		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{GetCurrentId(leaderboardType)}-{serviceKey}`);
 	end;
 
 	-- If we are using a MemoryStore, we can just update the data
-	if (leaderboardType ~= "AllTime" or rollingExpiry) then
-		local ShardCount = rollingExpiry and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
-		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
-	end;
+	-- Not a viable solution anymore, limits are too poor
+	-- if (leaderboardType ~= "AllTime" or rollingExpiry) then
+	-- 	local ShardCount = rollingExpiry and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
+	-- 	return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
+	-- end;
 
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
 end
@@ -178,30 +186,24 @@ end
 ]=]
 function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?): Board
 	local self = setmetatable({} :: BoardArguments, Board);
+	print(rollingExpiry);
 
 	self._serviceKey = serviceKey;
-	self._storeType, self._store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
+	self._storeType, self._store = ConstructStore(serviceKey, leaderboardType);
 	self._threads = {};
-	self.Logger = Logger.new(`Board-{serviceKey}`, debugMode or false);
+	self._logger = Logger.new(`Board-{serviceKey}`, debugMode or false);
 
-	-- If the leaderboard is yearly, we need to check if the year has changed and update the store
-	-- Ty Proxus for writing this
-	if (leaderboardType == "Yearly") then
-		local initialDate = os.date("*t", os.time());
-		local isLastMinute = false;
-
+	-- New implementation: we just check if the current id is different from the previous one
+	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
 		local thread = Spawn(function()
+			local CurrentId = GetCurrentId(leaderboardType);
 			while (true) do
-				local currentDate = os.date("*t", os.time());
-				local isNewYear = currentDate.year ~= initialDate.year;
-				isLastMinute = isLastMinute or (currentDate.yday == 365 and currentDate.hour == 23 and currentDate.min == 59);
-
-				if (isNewYear) then
-					initialDate = currentDate;
-					isLastMinute = false;
-					self.StoreType, self.Store = ConstructStore(serviceKey, leaderboardType);
+				local NewId = GetCurrentId(leaderboardType);
+				if (NewId ~= CurrentId) then
+					CurrentId = NewId;
+					self._storeType, self._store = ConstructStore(serviceKey, leaderboardType);
 				end;
-				task.wait(if isLastMinute then nil else 30);
+				task.wait(5);
 			end;
 		end);
 		table.insert(self._threads, thread);
@@ -235,13 +237,14 @@ function Board:Get(amount, sortDirection)
 		else
 			local Result = self._store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
 			local Data = Result:GetCurrentPage() :: {any};
+			print(#Data)
 			return Map(Data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 		end;
 	end;
 
 	return Promise.try(RetrieveTopData)
 	:andThen(function(data)
-		self.Logger:Log(1, `Successfully retrieved top data for {self._serviceKey}`, data);
+		self._logger:Log(1, `Successfully retrieved top data for {self._serviceKey}`, data);
 		return data;
 	end)
 	:catch(function(Error)
@@ -265,7 +268,7 @@ function Board:Update(userId, value)
 
 	-- If we are using a MemoryStore, we can just update the data
 	if (self._storeType == "MemoryStore") then
-		self.Logger:Log(1, `Successfully updated data for ${userId} in {self._serviceKey}`);
+		self._logger:Log(1, `Successfully updated data for ${userId} in {self._serviceKey}`);
 		return self._store:Set(userId, value);
 	end;
 
@@ -307,7 +310,7 @@ function Board:Destroy()
 	end;
 
 	-- Destroy the logger
-	self.Logger:Destroy();
+	self._logger:Destroy();
 
 	-- Destroy the board
 	setmetatable(self, nil);

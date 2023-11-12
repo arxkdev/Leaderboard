@@ -16,13 +16,13 @@ local Leaderboards = {
 	["Monthly"] = `Monthly-{Key}`,
 	["AllTime"] = `AllTime-{Key}`,
 
-	-- Test for rolling
+	-- Test for rolling (not implemented yet)
 	-- ["10MinutesRolling"] = {60 * 10, `10MinutesRolling-{Key}`}, -- 10 minutes rolling leaderboard
 	-- ["15MinutesRolling"] = {60 * 15, `15MinutesRolling-{Key}`}, -- 15 minutes rolling leaderboard
 };
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
-	Interval = 120,
+	Interval = 25,
 	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 });
 
@@ -38,7 +38,7 @@ local function UpdateBoard(data: TopData, model: Model)
 		local item = LeaderboardTemplate:Clone();
 		item.Name = `Item-${i}`;
 		item.Rank.Text = v.Rank;
-		item.Username.Text = `@{v.DisplayName}`;
+		item.Username.Text = `{v.Username}`;
 		item.LayoutOrder = i
 		item["Value"].Text = v.Value;
 		item.LayoutOrder = v.Rank;
@@ -56,9 +56,9 @@ local function IncrementMoneyTest()
 	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId2, 100);
 
 	-- Larger scale test
-	for _ = 1, 5 do
-		MoneyLeaderboard:IncrementValues(Leaderboards, math.random(1, 10000000), math.random(1, 1500));
-	end;
+	-- for _ = 1, 50 do
+	-- 	MoneyLeaderboard:IncrementValues(Leaderboards, math.random(1, 10000000), math.random(1, 1500));
+	-- end;
 end
 
 MoneyLeaderboard.Updated:Connect(function(boards)

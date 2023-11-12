@@ -83,6 +83,7 @@ export type LeaderboardTypeArgument = {
 	@field _valueQueue ValueQueueType
 	@field _threads {thread}
 	@field _connections {RBXScriptConnection}
+	@field _logger Logger.Logger?
 ]=]
 export type LeaderboardArguments = {
 	Updated: Signal.Signal<{AllTopData}>,
@@ -93,7 +94,7 @@ export type LeaderboardArguments = {
 	_valueQueue: ValueQueueType,
 	_threads: {thread},
 	_connections: {RBXScriptConnection},
-	Logger: Logger.Logger?,
+	_logger: Logger.Logger?,
 }
 
 --[=[
@@ -232,7 +233,7 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 	self._valueQueue = {};
 	self._threads = {};
 	self._connections = {};
-	self.Logger = Logger.new("Leaderboard", debugMode or false);
+	self._logger = Logger.new("Leaderboard", debugMode or false);
 
 	-- Add to leaderboards
 	Leaderboards[self._serviceKey] = self;
@@ -480,7 +481,7 @@ function Leaderboard:Destroy()
 	end;
 
 	-- Logger destroy
-	self.Logger:Destroy();
+	self._logger:Destroy();
 
 	-- Remove from leaderboards
 	if (Leaderboards[self._serviceKey]) then
