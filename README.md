@@ -1,26 +1,14 @@
-<div align="center" display="inline-block">
-  <h1>Leaderboard</h1>
+<h1 align="center">Leaderboard</h1>
 
-  <table display="inline-block">
-    <thead>
-      <tr>
-        <th>Status</th>
-        <th>Badge</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>CI Status</td>
-        <td><img src="https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml/badge.svg" alt="CI Status" /></td>
-      </tr>
-      <tr>
-        <td>Documentation Deployment Status</td>
-        <td><img src="https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml/badge.svg" alt="Documentation Deployment Status" /></td>
-      </tr>
-      <tr>
-        <td>Documentation Deployment</td>
-        <td><img src="https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment/badge.svg" alt="Documentation Deployment" /></td>
-      </tr>
-    </tbody>
-  </table>
+<div align="center">
+
+CI Status: 
+[![Lint](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/ci.yaml)
+
+Documentation Build Status: 
+[![Documentation](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/docs.yaml)
+
+Documentation Publish Status: 
+[![Published](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/arxkdev/Leaderboard/actions/workflows/pages/pages-build-deployment)
+
 </div>
