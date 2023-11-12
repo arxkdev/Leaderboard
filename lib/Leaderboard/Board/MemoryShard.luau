@@ -23,9 +23,9 @@ local FALLBACK_EXPIRY_TIMES = {
 
 --[=[
     @within MemoryShard
-    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | "Rolling" | string
+    @type LeaderboardType "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "AllTime" | string
 ]=]
-export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime" | "Rolling" | string;
+export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "AllTime" | string;
 
 --[=[
     @within MemoryShard
@@ -38,14 +38,17 @@ export type MemoryShard = typeof(setmetatable({} :: MemoryShardArguments, {} :: 
 	@interface MemoryShardArguments
 	@field _type LeaderboardType
 	@field _fallbackExpiry number
+	@field _isRollingExpiry boolean
 	@field _shards {MemoryStoreSortedMap}
 	@field _shardCount number
 ]=]
 export type MemoryShardArguments = {
 	_type: LeaderboardType,
 	_fallbackExpiry: number,
+	_isRollingExpiry: boolean,
 	_shards: {MemoryStoreSortedMap},
 	_shardCount: number,
+	Logger: Logger.Logger?,
 }
 
 --[=[
@@ -81,6 +84,7 @@ export type TopData = {
 type Object = {
 	__index: Object,
 	_getShardKey: (self: MemoryShard, userId: number) -> (number),
+	_getExpiry: (leaderboardType: LeaderboardType, leaderboardKey: number | string | {number & string}) -> (number | nil),
 	_getAsync: (self: MemoryShard, userId: number) -> Promise.TypedPromise<any>,
 	_setAsync: (self: MemoryShard, userId: number, value: any, expiry: number, sortKey: number) -> Promise.TypedPromise<boolean>,
 	_updateAsync: (self: MemoryShard, userId: number, transformer: (any) -> (any), expiry: number) -> Promise.TypedPromise<boolean>,
@@ -98,12 +102,40 @@ type Object = {
 local MemoryShard: Object = {} :: Object;
 MemoryShard.__index = MemoryShard;
 
-local function GetExpiry(leaderboardType: LeaderboardType): number | nil
-	if (leaderboardType == "Rolling") then
+--[=[
+	@param leaderboardType LeaderboardType
+	@param serviceKey string
+	@param shardCount number
+	@param rollingExpiry number?
+	@param debugMode boolean?
+
+	Creates a new MemoryShard
+]=]
+function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?)
+	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
+	self._shards = {};
+	self._shardCount = shardCount;
+	self._type = leaderboardType;
+	self._isRollingExpiry = rollingExpiry ~= nil;
+	self._fallbackExpiry = (rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self._type];
+	self.Logger = Logger.new("MemoryShard", debugMode or false);
+
+	for i = 1, shardCount do
+		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
+		self._shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
+		self.Logger:Log(1, `Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
+	end;
+
+	return self;
+end
+
+function MemoryShard:_getExpiry()
+	if (self._isRollingExpiry) then
 		-- rolling expiry is dynamic so we can't return a fixed value
 		return nil;
 	end;
 
+	local LeaderboardType = self._type;
 	local DateTimeNow = DateTime.now();
 	local DateTable = DateTimeNow:ToUniversalTime();
 	local CurrentDayOfWeek = (math.floor(DateTimeNow.UnixTimestamp / 86400) + 4) % 7 + 1;
@@ -121,22 +153,22 @@ local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	local SecondsPassedThisWeek = (CurrentDayOfWeek - 1) * 86400 + SecondsPassedToday;
 	local SecondsPassedThisMonth = (DateTable.Day - 1) * 86400 + SecondsPassedToday;
 
-	if (leaderboardType == "Hourly") then
+	if (LeaderboardType == "Hourly") then
 		local SecondsLeft = (TotalSecondsInAnHour - SecondsPassedThisHour);
 		return SecondsLeft;
 	end;
 
-	if (leaderboardType == "Daily") then
+	if (LeaderboardType == "Daily") then
 		local SecondsLeft = (TotalSecondsInADay - SecondsPassedToday);
 		return SecondsLeft;
 	end;
 
-	if (leaderboardType == "Weekly") then
+	if (LeaderboardType == "Weekly") then
 		local SecondsLeft = (TotalSecondsInAWeek - SecondsPassedThisWeek);
 		return SecondsLeft;
 	end;
 
-	if (leaderboardType == "Monthly") then
+	if (LeaderboardType == "Monthly") then
 		local SecondsLeft = (TotalSecondsInMonth - SecondsPassedThisMonth);
 		return SecondsLeft;
 	end;
@@ -144,31 +176,6 @@ local function GetExpiry(leaderboardType: LeaderboardType): number | nil
 	return nil;
 end
 
---[=[
-	@param leaderboardType LeaderboardType
-	@param serviceKey string
-	@param shardCount number
-	@param rollingExpiry number?
-	@param debugMode boolean?
-
-	Creates a new MemoryShard
-]=]
-function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?)
-	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
-	self._shards = {};
-	self._shardCount = shardCount;
-	self._type = leaderboardType;
-	self._fallbackExpiry = (rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self._type];
-	self.Logger = Logger.new("MemoryShard", debugMode or false);
-
-	for i = 1, shardCount do
-		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
-		self._shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
-		self.Logger:Log(1, `Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
-	end;
-
-	return self;
-end
 
 -- Gets the Shard Key using prefixing and modulo
 --[=[
@@ -280,7 +287,7 @@ function MemoryShard:Get(topAmount, sortDirection)
 				Enum.SortDirection[sortDirection],
 				topAmount
 			)
-			if (self._type == "Rolling") then
+			if (self._isRollingExpiry) then
 				for _, record in ipairs(data) do
 					-- get rid of expiry and creation date padding, convert back to number
 					record.value = tonumber(record.value.value);
@@ -336,11 +343,8 @@ function MemoryShard:Set(userId, value)
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
 	SmartAssert(typeof(value) == "function" or typeof(value) == "number", "transformer must be a function or a number");
 
-	-- Get the shard key, shard, leaderboard type, and user key
-	local LeaderboardType = self._type;
-
 	-- Rolling support
-	if (LeaderboardType == "Rolling") then
+	if (self._isRollingExpiry) then
 		return self:_getAsync(userId):andThen(function(oldValue)
 			local firstTime = oldValue == nil;
 			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value);
@@ -381,7 +385,7 @@ function MemoryShard:Set(userId, value)
 			return compressedValue, newSortKey;
 		end;
 		return nil;
-	end, GetExpiry(LeaderboardType) or self._fallbackExpiry):catch(warn);
+	end, self:_getExpiry() or self._fallbackExpiry):catch(warn);
 end
 
 -- Make indexing the wrong key throw an error
