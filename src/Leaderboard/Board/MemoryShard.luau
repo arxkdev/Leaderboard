@@ -13,12 +13,12 @@ local FoundInTable = Util.FoundInTable;
 local GetDaysInMonth = Util.GetDaysInMonth;
 local Sha1 = Util.Sha1;
 local FALLBACK_EXPIRY_TIMES = Util.FALLBACK_EXPIRY_TIMES;
-local RECORDS_FETCING_MAP = {
-	["Hourly"] = 15,
-	["Daily"] = 25,
-	["Weekly"] = 30,
-	["Monthly"] = 35,
-}
+-- local RECORDS_FETCING_MAP = {
+-- 	["Hourly"] = 15,
+-- 	["Daily"] = 25,
+-- 	["Weekly"] = 30,
+-- 	["Monthly"] = 35,
+-- }
 
 --[=[
     @within MemoryShard
