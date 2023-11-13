@@ -215,9 +215,15 @@ end
 function MemoryShard:_getAsync(userId)
 	local ShardKey = self:_getShardKey(userId);
 	local Shard = self._shards[ShardKey] or self._shards[1];
-	return Promise.retryWithVariableDelay(function()
-		return Shard:GetAsync(userId);
-	end, 10, 1, "Exponential"):catch(warn);
+	return Promise.new(function(resolve, reject)
+		local success, result = pcall(function()
+			return Shard:GetAsync(userId);
+		end);
+		if (not success) then
+			return reject(result);
+		end;
+		return resolve(result);
+	end):catch(warn);
 end
 
 --[=[
@@ -233,9 +239,15 @@ end
 function MemoryShard:_setAsync(userId, value, expiry, sortKey)
 	local ShardKey = self:_getShardKey(userId);
 	local Shard = self._shards[ShardKey] or self._shards[1];
-	return Promise.retryWithVariableDelay(function()
-		return Shard:SetAsync(userId, value, expiry, sortKey);
-	end, 10, 1, "Exponential"):catch(warn);
+	return Promise.new(function(resolve, reject)
+		local success, result = pcall(function()
+			return Shard:SetAsync(userId, value, expiry, sortKey);
+		end);
+		if (not success) then
+			return reject(result);
+		end;
+		return resolve(result);
+	end):catch(warn);
 end
 
 --[=[
@@ -250,9 +262,15 @@ end
 function MemoryShard:_updateAsync(userId, transformer, expiry)
 	local ShardKey = self:_getShardKey(userId);
 	local Shard = self._shards[ShardKey] or self._shards[1];
-	return Promise.retryWithVariableDelay(function()
-		return Shard:UpdateAsync(userId, transformer, expiry);
-	end, 10, 1, "Exponential"):catch(warn);
+	return Promise.new(function(resolve, reject)
+		local success, result = pcall(function()
+			return Shard:UpdateAsync(userId, transformer, expiry);
+		end);
+		if (not success) then
+			return reject(result);
+		end;
+		return resolve(result);
+	end):catch(warn);
 end
 
 -- Gets the top data from all the shards for this MemoryShard
@@ -307,8 +325,14 @@ function MemoryShard:Get(topAmount, sortDirection)
 	-- Go through the shards, extract the data, and combine it
 	local Promises = {};
 	for _, Shard in self._shards do
-		local ShardPromise = Promise.retryWithVariableDelay(ProcessShard(Shard), 10, 1, "Exponential"):andThen(function(Result)
-			for _, record in Result do
+		local ShardPromise = Promise.new(function(resolve, reject)
+			local success, result = pcall(ProcessShard(Shard));
+			if (not success) then
+				return reject(result);
+			end;
+			return resolve(result);
+		end):andThen(function(data)
+			for _, record in data do
 				ProcessRecord(record);
 			end;
 		end):catch(warn);
