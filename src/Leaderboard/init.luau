@@ -246,16 +246,22 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 	-- Start automation
 	if (automationSettings and automationSettings.Automation) then
 		local Thread = Spawn(function()
-			while (true) do
-				-- Update the value from the queue
-				self:SaveValues();
+			local Times = 0;
 
-				-- Get the top and update the signal
-				local _, Data = self:GetRecords("All", automationSettings.RecordCount):await();
-				if (Data) then
-					self.Updated:Fire(Data);
-					for _, board in Data do
-						self.BoardUpdated:Fire(board);
+			while (true) do
+				Times += 1;
+				-- We work in alternating turns, so one loop we'll update the value queue, the next we'll update the actual store value(s)
+				if (Times % 2 == 0) then
+					-- Update the value from the queue
+					self:SaveValues();
+				else
+					-- Get the top and update the signal
+					local _, Data = self:GetRecords("All", automationSettings.RecordCount):await();
+					if (Data) then
+						self.Updated:Fire(Data);
+						for _, board in Data do
+							self.BoardUpdated:Fire(board);
+						end;
 					end;
 				end;
 

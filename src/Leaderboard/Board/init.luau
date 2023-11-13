@@ -22,9 +22,9 @@ local Spawn = task.spawn;
 -- Constants
 local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
 	["Hourly"] = 1,
-	["Daily"] = 2,
+	["Daily"] = 1,
 	["Weekly"] = 2,
-	["Monthly"] = 5,
+	["Monthly"] = 3,
 }
 
 -- Supports Daily, Weekly, Monthly and AllTime currently

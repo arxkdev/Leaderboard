@@ -307,10 +307,11 @@ function MemoryShard:Get(topAmount, sortDirection)
 	end
 
 	local function ProcessShard(shard: MemoryStoreSortedMap)
+		print("Shard");
 		return function()
 			local data = shard:GetRangeAsync(
 				Enum.SortDirection[sortDirection],
-				RECORDS_FETCING_MAP[self._type] or 35
+				100
 			)
 			if (self._isRollingExpiry) then
 				for _, record in data do
@@ -389,13 +390,13 @@ function MemoryShard:Set(userId, value)
 
 			local compressedValue = Compression.Compress(transformedValue);
 			local newSortKey = transformedValue;
-			
+
 			local newValue = {
 				value = compressedValue, -- this will be the value we save, we need to save as table to carry over creation data
 				_created = if firstTime then os.time() else created,
 				_expiry = self._fallbackExpiry
 			};
-			
+
 			-- update the value with appropriate expiry time left
 			self:_setAsync(userId, newValue, newValue._expiry - (os.time() - newValue._created), newSortKey):catch(warn);
 			return true;
