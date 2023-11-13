@@ -15,6 +15,7 @@ export type Promise = {
 
 	await: (self: Promise) -> (boolean, ...any),
 	awaitStatus: (self: Promise) -> (Status, ...any),
+	awaitValue: (self: Promise) -> ...any,
 
 	cancel: (self: Promise) -> (),
 	catch: (self: Promise, failureHandler: (...any) -> ...any) -> Promise,
@@ -40,6 +41,7 @@ export type TypedPromise<T> = {
 
 	await: (self: TypedPromise<T...>) -> (boolean, ...T),
 	awaitStatus: (self: TypedPromise<T...>) -> (Status, ...T),
+	awaitValue: (self: TypedPromise<T...>) -> ...any,
 
 	cancel: (self: TypedPromise<T...>) -> (),
 	catch: (self: TypedPromise<T...>, failureHandler: (...any) -> ...any) -> TypedPromise<any>,
