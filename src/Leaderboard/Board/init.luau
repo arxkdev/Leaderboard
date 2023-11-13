@@ -287,21 +287,31 @@ function Board:Update(userId, value)
 
 	-- Using an actual DataStore, we need to set the data
 	return Promise.retryWithVariableDelay(function()
-		return self._store:UpdateAsync(userId, function(oldValue)
-			oldValue = oldValue and Compression.Decompress(oldValue) or 0;
-			local transformedValue = (type(value) == "function") and value(oldValue) or value;
-
-			-- If their oldValue is greater than the new value, we don't want to update it
-			if (oldValue > transformedValue) then
+		
+		local result = {pcall(function()
+			return self._store:UpdateAsync(userId, function(oldValue)
+				oldValue = oldValue and Compression.Decompress(oldValue) or 0;
+				local transformedValue = (type(value) == "function") and value(oldValue) or value;
+	
+				-- If their oldValue is greater than the new value, we don't want to update it
+				if (oldValue > transformedValue) then
+					return nil;
+				end;
+	
+				if (type(transformedValue) == "number") then
+					local compressedValue = Compression.Compress(transformedValue);
+					return compressedValue;
+				end;
 				return nil;
-			end;
+			end);
+		end)}
 
-			if (type(transformedValue) == "number") then
-				local compressedValue = Compression.Compress(transformedValue);
-				return compressedValue;
-			end;
-			return nil;
-		end);
+		local success, resp = result[1], result[2]
+		if success then
+			return Promise.resolve(unpack(result, 2))
+		else
+			return Promise.reject(resp)
+		end
 	end, 10, 1, "Exponential"):catch(warn);
 end
 
