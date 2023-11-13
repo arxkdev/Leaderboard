@@ -13,6 +13,12 @@ local FoundInTable = Util.FoundInTable;
 local GetDaysInMonth = Util.GetDaysInMonth;
 local Sha1 = Util.Sha1;
 local FALLBACK_EXPIRY_TIMES = Util.FALLBACK_EXPIRY_TIMES;
+local RECORDS_FETCING_MAP = {
+	["Hourly"] = 15,
+	["Daily"] = 25,
+	["Weekly"] = 30,
+	["Monthly"] = 35,
+}
 
 --[=[
     @within MemoryShard
@@ -286,7 +292,7 @@ function MemoryShard:Get(topAmount, sortDirection)
 		return function()
 			local data = shard:GetRangeAsync(
 				Enum.SortDirection[sortDirection],
-				100
+				RECORDS_FETCING_MAP[self._type] or 35
 			)
 			if (self._isRollingExpiry) then
 				for _, record in data do

@@ -23,7 +23,7 @@ local Spawn = task.spawn;
 -- local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
 -- 	["Hourly"] = 1,
 -- 	["Daily"] = 2,
--- 	["Weekly"] = 3,
+-- 	["Weekly"] = 2,
 -- 	["Monthly"] = 5,
 -- }
 
@@ -127,7 +127,7 @@ local function GetUsernameFromId(userId: number | string): (string)
 		return Players:GetNameFromUserIdAsync(newUserId);
 	end);
 	if (not Success) then
-		warn(`Leaderboard had trouble getting user info: {Result}`);
+		-- warn(`Leaderboard had trouble getting user info: {Result}`);
 		return "Unknown", "Unknown";
 	end;
 	UserIdsCache[newUserId] = {Result};
@@ -145,9 +145,9 @@ local function Transform(rank: number, key: number, value: number): TopData
 	};
 end
 
-local function GetRequestBudget(typeOfBudget: Enum.DataStoreRequestType): number
-	return DataStoreService:GetRequestBudgetForRequestType(typeOfBudget);
-end
+-- local function GetRequestBudget(typeOfBudget: Enum.DataStoreRequestType): number
+-- 	return DataStoreService:GetRequestBudgetForRequestType(typeOfBudget);
+-- end
 
 -- local function ShardCalculation(rollingExpiry: number): number
 -- 	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
@@ -164,7 +164,8 @@ local function GetCurrentId(leaderboardType: string)
 	return leaderboardType == "Hourly" and CurrentHour or leaderboardType == "Daily" and CurrentDay or leaderboardType == "Weekly" and CurrentWeek or leaderboardType == "Monthly" and CurrentMonth or leaderboardType == "Yearly" and CurrentYear or "AllTime" and "AllTime";
 end
 
-local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
+local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
+	print(rollingExpiry);
 	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
 		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{GetCurrentId(leaderboardType)}-{serviceKey}`);
 	end;
@@ -190,10 +191,9 @@ end
 ]=]
 function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?): Board
 	local self = setmetatable({} :: BoardArguments, Board);
-	print(rollingExpiry);
 
 	self._serviceKey = serviceKey;
-	self._storeType, self._store = ConstructStore(serviceKey, leaderboardType);
+	self._storeType, self._store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
 	self._threads = {};
 	self._logger = Logger.new(`Board-{serviceKey}`, debugMode or false);
 
@@ -238,11 +238,11 @@ function Board:Get(amount, sortDirection)
 				return Map(data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
 			end);
 		else
-			local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
-			if (RequestBudget < 1) then
-				warn(`Skipping getting top data for {self._serviceKey} due to insufficient budget`);
-				return {};
-			end;
+			-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
+			-- if (RequestBudget < 1) then
+			-- 	warn(`Skipping getting top data for {self._serviceKey} due to insufficient budget`);
+			-- 	return {};
+			-- end;
 			local Result = self._store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
 			local Data = Result:GetCurrentPage() :: {any};
 			return Map(Data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
@@ -279,14 +279,15 @@ function Board:Update(userId, value)
 		return self._store:Set(userId, value);
 	end;
 
-	local Budget = GetRequestBudget(Enum.DataStoreRequestType.UpdateAsync);
-	if (Budget < 1) then
-		warn(`Skipping updating data for {userId} in {self._serviceKey} due to insufficient budget`);
-		return false;
-	end;
+	-- local Budget = GetRequestBudget(Enum.DataStoreRequestType.UpdateAsync);
+	-- if (Budget < 1) then
+	-- 	warn(`Skipping updating data for {userId} in {self._serviceKey} due to insufficient budget`);
+	-- 	return false;
+	-- end;
 
 	-- Using an actual DataStore, we need to set the data
 	return Promise.retryWithVariableDelay(function()
+		print("Updating data");
 		return self._store:UpdateAsync(userId, function(oldValue)
 			oldValue = oldValue and Compression.Decompress(oldValue) or 0;
 			local transformedValue = (type(value) == "function") and value(oldValue) or value;

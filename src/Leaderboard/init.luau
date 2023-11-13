@@ -20,7 +20,7 @@ local Cancel = task.cancel;
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = Util.MEMORY_STORE_SERVICE_MAX_EXPIRY;
 local BOARD_TYPES = Util.BOARD_TYPES;
-local MAX_OVERALL_LEADERBOARDS = 5; -- Overall, you can only create 5 leaderboards using Leaderboard.new, this is to prevent rate limiting
+local MAX_OVERALL_LEADERBOARDS = 3; -- Overall, you can only create 5 leaderboards using Leaderboard.new, this is to prevent rate limiting
 local MAX_BOARDS = 7; -- You can only create up to 7 boards per leaderboard
 
 --[=[
@@ -120,7 +120,7 @@ type ValueQueueType = {
 	@field SetValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
 	@field UpdateStoreValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
 	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
-	@field SaveValues (self: Leaderboard) -> ()
+	@field SaveValues (self: Leaderboard) -> Promise.TypedPromise<nil>
 	@field Destroy (self: Leaderboard) -> ()
 	@field new (leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, debugMode: boolean?) -> Leaderboard
 ]=]
@@ -130,7 +130,7 @@ type Object = {
 	SetValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
-	SaveValues: (self: Leaderboard) -> (),
+	SaveValues: (self: Leaderboard) -> Promise.TypedPromise<nil>,
 	Destroy: (self: Leaderboard) -> (),
 	new: (leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, debugMode: boolean?) -> Leaderboard,
 }
@@ -257,6 +257,7 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 						self.BoardUpdated:Fire(board);
 					end;
 				end);
+
 				task.wait(automationSettings.Interval);
 			end;
 		end);
@@ -281,15 +282,19 @@ end
 	Updates the actual store value(s) (should only be used every 90-120 seconds)
 ]=]
 function Leaderboard:SaveValues()
+	local Promises = {};
 	for UserId, BoardType in self._valueQueue do
 		for _, Data in BoardType do
-			Data.Board:Update(UserId, function(oldValue)
+			local PromiseUpdate = Data.Board:Update(UserId, function(oldValue)
 				return (oldValue + Data.Amount); -- Increment the value
 			end):andThen(function()
 				self._valueQueue[UserId] = nil;
 			end);
+			table.insert(Promises, PromiseUpdate);
 		end;
 	end;
+
+	return Promise.all(Promises);
 end
 
 -- Gets the data for all the top boards (should only be used every 90-120 seconds)
@@ -461,7 +466,7 @@ end
 ]=]
 function Leaderboard:Destroy()
 	-- Update the value from the queue
-	-- self:SaveValues();
+	self:SaveValues();
 
 	-- Destroy all the boards
 	for _, board in self._boards do

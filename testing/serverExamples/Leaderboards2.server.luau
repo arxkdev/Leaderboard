@@ -8,13 +8,13 @@ local Leaderboard = require(Lib.Leaderboard);
 type TopData = {Leaderboard.TopData};
 
 -- Constants
-local Key = 2;
+local Key = "Wins";
 local Leaderboards = {
-	["Hourly"] = `WinsHourly-{Key}`,
-	["Daily"] = `WinsDaily-{Key}`,
-	["Weekly"] = `WinsWeekly-{Key}`,
-	["Monthly"] = `WinsMonthly-{Key}`,
-	["AllTime"] = `WinsAllTime-{Key}`,
+	["Hourly"] = `Hourly-{Key}`,
+	["Daily"] = `Daily-{Key}`,
+	["Weekly"] = `Weekly-{Key}`,
+	["Monthly"] = `Monthly-{Key}`,
+	["AllTime"] = `AllTime-{Key}`,
 
 	-- Test for rolling (not implemented yet)
 	-- ["10MinutesRolling"] = {60 * 10, `10MinutesRolling-{Key}`}, -- 10 minutes rolling leaderboard
@@ -22,7 +22,7 @@ local Leaderboards = {
 };
 local WinsLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
-	Interval = 55,
+	Interval = 5,
 	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 });
 
@@ -64,7 +64,7 @@ end
 WinsLeaderboard.Updated:Connect(function(boards)
 	-- Returns us a table of all the boards that were updated
 	for _, board in boards do
-		-- print(`Updating board {board.Type} - with {#board.Data} items!`);
+		print(`[Wins] Updating board {board.Type} - with {#board.Data} items!`);
 		UpdateBoard(board.Data, workspace.Test2.Leaderboards[board.Type]);
 	end;
 
