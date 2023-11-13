@@ -251,12 +251,13 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 				self:SaveValues();
 
 				-- Get the top and update the signal
-				self:GetRecords("All", automationSettings.RecordCount):andThen(function(boards)
-					self.Updated:Fire(boards);
-					for _, board in boards do
+				local _, Data = self:GetRecords("All", automationSettings.RecordCount):await();
+				if (Data) then
+					self.Updated:Fire(Data);
+					for _, board in Data do
 						self.BoardUpdated:Fire(board);
 					end;
-				end);
+				end;
 
 				task.wait(automationSettings.Interval);
 			end;

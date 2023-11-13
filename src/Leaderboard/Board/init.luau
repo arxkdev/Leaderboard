@@ -20,12 +20,12 @@ local Cancel = task.cancel;
 local Spawn = task.spawn;
 
 -- Constants
--- local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
--- 	["Hourly"] = 1,
--- 	["Daily"] = 2,
--- 	["Weekly"] = 2,
--- 	["Monthly"] = 5,
--- }
+local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
+	["Hourly"] = 1,
+	["Daily"] = 2,
+	["Weekly"] = 2,
+	["Monthly"] = 5,
+}
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
 --[=[
@@ -149,10 +149,10 @@ end
 -- 	return DataStoreService:GetRequestBudgetForRequestType(typeOfBudget);
 -- end
 
--- local function ShardCalculation(rollingExpiry: number): number
--- 	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
--- 	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
--- end
+local function ShardCalculation(rollingExpiry: number): number
+	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
+	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
+end
 
 local function GetCurrentId(leaderboardType: string)
 	local CurrentHour = DateTime.now():ToUniversalTime().Hour;
@@ -165,17 +165,17 @@ local function GetCurrentId(leaderboardType: string)
 end
 
 local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
-	print(rollingExpiry);
-	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
-		return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{GetCurrentId(leaderboardType)}-{serviceKey}`);
-	end;
+	-- print(rollingExpiry);
+	-- if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
+	-- 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{GetCurrentId(leaderboardType)}-{serviceKey}`);
+	-- end;
 
 	-- If we are using a MemoryStore, we can just update the data
 	-- Not a viable solution anymore, limits are too poor
-	-- if (leaderboardType ~= "AllTime" or rollingExpiry) then
-	-- 	local ShardCount = rollingExpiry and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
-	-- 	return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
-	-- end;
+	if (leaderboardType ~= "AllTime" or rollingExpiry) then
+		local ShardCount = rollingExpiry and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
+		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
+	end;
 
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
 end
@@ -249,14 +249,15 @@ function Board:Get(amount, sortDirection)
 		end;
 	end;
 
-	return Promise.try(RetrieveTopData)
-	:andThen(function(data)
-		self._logger:Log(1, `Successfully retrieved top data for {self._serviceKey}`, data);
-		return data;
-	end)
-	:catch(function(Error)
-		warn(`Leaderboard had trouble getting top data with error: {Error}`);
-		return {};
+	return Promise.new(function(resolve, reject)
+		local Success, Result = pcall(function()
+			return RetrieveTopData();
+		end);
+		if (not Success) then
+			warn(`Leaderboard had trouble getting top data with error: {Result}`);
+			return reject(Result);
+		end;
+		return resolve(Result);
 	end) :: Promise.TypedPromise<{TopData}>;
 end
 
@@ -286,24 +287,31 @@ function Board:Update(userId, value)
 	-- end;
 
 	-- Using an actual DataStore, we need to set the data
-	return Promise.retryWithVariableDelay(function()
-		print("Updating data");
-		return self._store:UpdateAsync(userId, function(oldValue)
-			oldValue = oldValue and Compression.Decompress(oldValue) or 0;
-			local transformedValue = (type(value) == "function") and value(oldValue) or value;
+	return Promise.new(function(resolve, reject)
+		local Success, Result = pcall(function()
+			return self._store:UpdateAsync(userId, function(oldValue)
+				oldValue = oldValue and Compression.Decompress(oldValue) or 0;
+				local transformedValue = (type(value) == "function") and value(oldValue) or value;
 
-			-- If their oldValue is greater than the new value, we don't want to update it
-			if (oldValue > transformedValue) then
+				-- If their oldValue is greater than the new value, we don't want to update it
+				if (oldValue > transformedValue) then
+					return nil;
+				end;
+
+				if (type(transformedValue) == "number") then
+					local compressedValue = Compression.Compress(transformedValue);
+					return compressedValue;
+				end;
 				return nil;
-			end;
-
-			if (type(transformedValue) == "number") then
-				local compressedValue = Compression.Compress(transformedValue);
-				return compressedValue;
-			end;
-			return nil;
+			end);
 		end);
-	end, 10, 1, "Exponential"):catch(warn);
+		if (not Success) then
+			warn(`Leaderboard had trouble updating data with error: {Result}`);
+			return reject(Result);
+		end;
+		self._logger:Log(1, `Successfully updated data for {userId} in {self._serviceKey}`);
+		return resolve(Result);
+	end) :: Promise.TypedPromise<boolean>;
 end
 
 -- Destroys the board
