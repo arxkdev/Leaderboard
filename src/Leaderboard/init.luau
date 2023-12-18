@@ -410,7 +410,7 @@ end
 function Leaderboard:SetValues(boardTypes, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
-	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
+	SmartAssert(type(boardTypes) == "table" or type(boardTypes) == "string", "BoardTypes must be a table or a string");
 
 	-- If boardTypes is all, update all the boards
 	if (boardTypes == "All") then
@@ -450,7 +450,7 @@ end
 function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 	SmartAssert(type(userId) == "number", "UserId must be a number");
 	SmartAssert(type(value) == "function" or type(value) == "number", "Value must be a function or a number");
-	SmartAssert(type(boardTypes) == "table", "BoardTypes must be a table");
+	SmartAssert(type(boardTypes) == "table" or type(boardTypes) == "string", "BoardTypes must be a table or a string");
 
 	-- If boardTypes is all, update all the boards
 	if (boardTypes == "All") then
