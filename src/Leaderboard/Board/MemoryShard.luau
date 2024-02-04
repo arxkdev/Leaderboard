@@ -383,11 +383,6 @@ function MemoryShard:Set(userId, value)
 			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value);
 			local transformedValue = (typeof(value) == "function" and value(oldValue) or value);
 
-			-- If their oldValue is greater than the new value, we don't want to update it
-			if (oldValue > transformedValue) then
-				return nil;
-			end;
-
 			local compressedValue = Compression.Compress(transformedValue);
 			local newSortKey = transformedValue;
 
@@ -407,18 +402,11 @@ function MemoryShard:Set(userId, value)
 	return self:_updateAsync(userId, function(oldValue)
 		oldValue = oldValue and Compression.Decompress(oldValue) or 0;
 		local transformedValue = (typeof(value) == "function") and value(oldValue) or value;
-
-		-- If their oldValue is greater than the new value, we don't want to update it
-		if (oldValue > transformedValue) then
-			return nil;
-		end;
-
 		local compressedValue = Compression.Compress(transformedValue);
 		local newSortKey = transformedValue;
 		if (compressedValue and newSortKey) then
 			return compressedValue, newSortKey;
 		end;
-		return nil;
 	end, self:_getExpiry() or self._fallbackExpiry):catch(warn);
 end
 
