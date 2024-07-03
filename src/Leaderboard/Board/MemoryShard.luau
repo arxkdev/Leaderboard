@@ -307,7 +307,6 @@ function MemoryShard:Get(topAmount, sortDirection)
 	end
 
 	local function ProcessShard(shard: MemoryStoreSortedMap)
-		print("Shard");
 		return function()
 			local data = shard:GetRangeAsync(
 				Enum.SortDirection[sortDirection],

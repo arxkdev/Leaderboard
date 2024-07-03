@@ -4,18 +4,17 @@
 
 -- DataStoreService to handle longer than 42 days (all time most likely)
 local DataStoreService = game:GetService("DataStoreService");
-local Players = game:GetService("Players");
 
 -- Requirements
 local MemoryShard = require(script.MemoryShard);
 local Promise = require(script.Parent.Promise);
 local Util = require(script.Parent.Util);
 local Logger = require(script.Parent.Logger);
+local UserIdsCache = require(script.Parent.UserIdCache);
 
 -- Variables
 local Compression = Util.Compression;
 local SmartAssert = Util.SmartAssert;
-local Map = Util.Map;
 local Cancel = task.cancel;
 local Spawn = task.spawn;
 
@@ -49,6 +48,7 @@ export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
 	@field _threads {thread}
 ]=]
 export type BoardArguments = {
+	_type: LeaderboardType,
 	_serviceKey: string,
 	_storeUsing: string,
 	_store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
@@ -92,9 +92,6 @@ type Object = {
 	new: (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?) -> Board,
 }
 
--- Start
-local UserIdsCache = {}; -- To assign userids {username, displayName}
-
 --[=[
 	@class Board
 
@@ -103,44 +100,12 @@ local UserIdsCache = {}; -- To assign userids {username, displayName}
 local Board: Object = {} :: Object;
 Board.__index = Board;
 
-
-local function GetUsernameFromId(userId: number | string): (string)
-	SmartAssert(userId ~= nil, "UserId cannot be nil");
-	SmartAssert(type(userId) == "number" or type(userId) == "string", "UserId must be a number or a string");
-	local newUserId = tonumber(userId or 0);
-
-	-- First, check if the cache contains the name
-	if (UserIdsCache[newUserId]) then
-		local Username = unpack(UserIdsCache[newUserId]);
-		return Username;
-	end;
-
-	-- Second, check if the user is already connected to the server
-	local player = Players:GetPlayerByUserId(newUserId);
-	if (player) then
-		UserIdsCache[newUserId] = {player.Name};
-		return player.Name;
-	end;
-
-	-- If all else fails, send a request
-	local Success, Result = pcall(function()
-		return Players:GetNameFromUserIdAsync(newUserId);
-	end);
-	if (not Success) then
-		-- warn(`Leaderboard had trouble getting user info: {Result}`);
-		return "Unknown", "Unknown";
-	end;
-	UserIdsCache[newUserId] = {Result};
-	return Result;
-end
-
 local function Transform(rank: number, key: number, value: number): TopData
-	local Username = GetUsernameFromId(key);
 	return {
 		Rank = rank,
 		Value = Compression.Decompress(value),
 		UserId = key,
-		Username = Username,
+		Username = UserIdsCache:GetNameFromUserId(key),
 		DisplayName = "Not supported yet",
 	};
 end
@@ -234,9 +199,14 @@ function Board:Get(amount, sortDirection)
 
 	local function RetrieveTopData()
 		if (self._storeType == "MemoryStore") then
-			return self._store:Get(amount, sortDirection):andThen(function(data)
-				return Map(data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
-			end);
+			local Result = self._store:Get(amount, sortDirection):awaitValue();
+			local Promises = {};
+			for rank, data in pairs(Result) do
+				table.insert(Promises, Promise.new(function(resolve)
+					resolve(Transform(rank, data.key, data.value))
+				end));
+			end;
+			return Promise.all(Promises):awaitValue() :: {TopData};
 		else
 			-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
 			-- if (RequestBudget < 1) then
@@ -245,7 +215,13 @@ function Board:Get(amount, sortDirection)
 			-- end;
 			local Result = self._store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
 			local Data = Result:GetCurrentPage() :: {any};
-			return Map(Data, function(v, rank) return Transform(rank, v.key, v.value); end) :: {TopData};
+			local Promises = {};
+			for rank, data in pairs(Data) do
+				table.insert(Promises, Promise.new(function(resolve)
+					resolve(Transform(rank, data.key, data.value))
+				end));
+			end;
+			return Promise.all(Promises):awaitValue() :: {TopData};
 		end;
 	end;
 
