@@ -16,13 +16,12 @@ local Leaderboards = {
 	["Monthly"] = `Monthly-{Key}`,
 	["AllTime"] = `AllTime-{Key}`,
 
-	-- Test for rolling (not implemented yet)
 	-- ["10MinutesRolling"] = {60 * 10, `10MinutesRolling-{Key}`}, -- 10 minutes rolling leaderboard
 	-- ["15MinutesRolling"] = {60 * 15, `15MinutesRolling-{Key}`}, -- 15 minutes rolling leaderboard
 };
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
-	Interval = 100,
+	Interval = 120,
 	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 });
 

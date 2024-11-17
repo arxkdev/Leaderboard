@@ -20,10 +20,10 @@ local Spawn = task.spawn;
 
 -- Constants
 local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
-	["Hourly"] = 1,
-	["Daily"] = 1,
-	["Weekly"] = 2,
-	["Monthly"] = 3,
+	["Hourly"] = 2,
+	["Daily"] = 3,
+	["Weekly"] = 3,
+	["Monthly"] = 4,
 }
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
@@ -115,8 +115,7 @@ end
 -- end
 
 local function ShardCalculation(rollingExpiry: number): number
-	-- desmos latex: f(x) = \lfloor 1 + 20 \log_{10}(\frac{x}{1.3 \times 10^7}) \rfloor
-	return math.floor(math.clamp((1 + 20 * math.log10(rollingExpiry * 0.000013) / math.log10(20)), 1, 30) + 0.5);
+	return math.round(math.log10(rollingExpiry * 6));
 end
 
 local function GetCurrentId(leaderboardType: string)
