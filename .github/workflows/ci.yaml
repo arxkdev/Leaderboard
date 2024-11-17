@@ -17,8 +17,8 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v3
 
-      - name: Setting up Rokit
-        uses: kalrnlo/setup-rokit@v1.0.0
+      - name: Setting up Aftman
+        uses: ok-nick/setup-aftman@v0.4.2
 
         with:
           version: "v0.2.7"
