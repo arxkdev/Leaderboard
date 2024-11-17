@@ -19,6 +19,7 @@ local Cancel = task.cancel;
 local Spawn = task.spawn;
 
 -- Constants
+local OFFLINE_ENVIRONMENT = game.GameId == 0;
 local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
 	["Hourly"] = 2,
 	["Daily"] = 3,
@@ -44,14 +45,14 @@ export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
 	@interface BoardArguments
 	@field _serviceKey string
 	@field _storeUsing string
-	@field _store MemoryStoreSortedMap | OrderedDataStore | MemoryShard
+	@field _store (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?
 	@field _threads {thread}
 ]=]
 export type BoardArguments = {
 	_type: LeaderboardType,
 	_serviceKey: string,
 	_storeUsing: string,
-	_store: MemoryStoreSortedMap | OrderedDataStore | MemoryShard,
+	_store: (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?,
 	_threads: {thread},
 	_logger: Logger.Logger?,
 }
@@ -128,7 +129,7 @@ local function GetCurrentId(leaderboardType: string)
 	return leaderboardType == "Hourly" and CurrentHour or leaderboardType == "Daily" and CurrentDay or leaderboardType == "Weekly" and CurrentWeek or leaderboardType == "Monthly" and CurrentMonth or leaderboardType == "Yearly" and CurrentYear or "AllTime" and "AllTime";
 end
 
-local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, MemoryStoreSortedMap | OrderedDataStore | MemoryShard)
+local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?)
 	-- print(rollingExpiry);
 	-- if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
 	-- 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{GetCurrentId(leaderboardType)}-{serviceKey}`);
@@ -140,6 +141,10 @@ local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardTy
 		local ShardCount = rollingExpiry and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
 		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
 	end;
+
+	if OFFLINE_ENVIRONMENT then
+		return "OrderedDataStore", {} :: any
+	end
 
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
 end
@@ -197,6 +202,10 @@ function Board:Get(amount, sortDirection)
 	sortDirection = sortDirection or "Descending";
 
 	local function RetrieveTopData()
+		if OFFLINE_ENVIRONMENT then
+			return {} :: { TopData }
+		end
+
 		if (self._storeType == "MemoryStore") then
 			local Result = self._store:Get(amount, sortDirection):awaitValue();
 			local Promises = {};
@@ -264,6 +273,10 @@ function Board:Update(userId, value)
 	-- Using an actual DataStore, we need to set the data
 	return Promise.new(function(resolve, reject)
 		local Success, Result = pcall(function()
+			if OFFLINE_ENVIRONMENT then
+				return
+			end
+
 			return self._store:UpdateAsync(userId, function(oldValue)
 				oldValue = oldValue and Compression.Decompress(oldValue) or 0;
 				local transformedValue = (type(value) == "function") and value(oldValue) or value;

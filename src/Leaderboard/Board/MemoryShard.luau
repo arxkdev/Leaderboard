@@ -13,6 +13,7 @@ local FoundInTable = Util.FoundInTable;
 local GetDaysInMonth = Util.GetDaysInMonth;
 local Sha1 = Util.Sha1;
 local FALLBACK_EXPIRY_TIMES = Util.FALLBACK_EXPIRY_TIMES;
+local OFFLINE_ENVIRONMENT = game.GameId == 0;
 -- local RECORDS_FETCING_MAP = {
 -- 	["Hourly"] = 15,
 -- 	["Daily"] = 25,
@@ -123,8 +124,22 @@ function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, s
 
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
-		self._shards[i] = MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
-		self._logger:Log(1, `Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
+
+		if OFFLINE_ENVIRONMENT then
+			continue
+		end
+
+		local success, response = pcall(function()
+			return MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i))
+		end)
+
+		if success then
+			self._logger:Log(1, `Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
+		else
+			self._logger:Log(1, `Failed to create MemoryStoreSortedMap for _Shared{tostring(i)}: {response}`);
+		end
+
+		self._shards[i] = success and response or nil;
 	end;
 
 	return self;
@@ -217,6 +232,10 @@ function MemoryShard:_getAsync(userId)
 	local Shard = self._shards[ShardKey] or self._shards[1];
 	return Promise.new(function(resolve, reject)
 		local success, result = pcall(function()
+			if not Shard then
+				return
+			end
+
 			return Shard:GetAsync(userId);
 		end);
 		if (not success) then
@@ -241,6 +260,10 @@ function MemoryShard:_setAsync(userId, value, expiry, sortKey)
 	local Shard = self._shards[ShardKey] or self._shards[1];
 	return Promise.new(function(resolve, reject)
 		local success, result = pcall(function()
+			if not Shard then
+				return
+			end
+
 			return Shard:SetAsync(userId, value, expiry, sortKey);
 		end);
 		if (not success) then
@@ -264,6 +287,10 @@ function MemoryShard:_updateAsync(userId, transformer, expiry)
 	local Shard = self._shards[ShardKey] or self._shards[1];
 	return Promise.new(function(resolve, reject)
 		local success, result = pcall(function()
+			if not Shard then
+				return
+			end
+
 			return Shard:UpdateAsync(userId, transformer, expiry);
 		end);
 		if (not success) then
