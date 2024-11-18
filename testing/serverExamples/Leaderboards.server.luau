@@ -2,13 +2,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage");
 local Players = game:GetService("Players");
 
 local LeaderboardTemplate = ReplicatedStorage:WaitForChild("LeaderboardTemplate");
-local Lib = ReplicatedStorage:WaitForChild("src");
-local Leaderboard = require(Lib.Leaderboard);
+local Leaderboard = require(ReplicatedStorage:WaitForChild("Leaderboard"));
 
 type TopData = {Leaderboard.TopData};
 
 -- Constants
-local Key = "Money";
+local Key = "Money10";
 local Leaderboards = {
 	["Hourly"] = `Hourly-{Key}`,
 	["Daily"] = `Daily-{Key}`,

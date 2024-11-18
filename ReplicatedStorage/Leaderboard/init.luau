@@ -21,7 +21,7 @@ local Cancel = task.cancel;
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = Util.MEMORY_STORE_SERVICE_MAX_EXPIRY;
 local BOARD_TYPES = Util.BOARD_TYPES;
-local MAX_OVERALL_LEADERBOARDS = 3; -- Overall, you can only create 5 leaderboards using Leaderboard.new, this is to prevent rate limiting
+local MAX_OVERALL_LEADERBOARDS = 4; -- Overall, you can only create 4 leaderboards using Leaderboard.new, this is to prevent rate limiting
 local MAX_BOARDS = 7; -- You can only create up to 7 boards per leaderboard
 
 --[=[
@@ -82,6 +82,10 @@ export type LeaderboardTypeArgument = {
 	@field _types LeaderboardTypeArgument
 	@field _boards {[LeaderboardType]: Board}
 	@field _valueQueue ValueQueueType
+	@field _isSaving boolean
+	@field _lastSaved number
+	@field _isFetching boolean
+	@field _lastFetch number
 	@field _threads {thread}
 	@field _connections {RBXScriptConnection}
 	@field _logger Logger.Logger?
@@ -93,6 +97,10 @@ export type LeaderboardArguments = {
 	_types: LeaderboardTypeArgument,
 	_boards: {[LeaderboardType]: Board},
 	_valueQueue: ValueQueueType,
+	_isSaving: boolean,
+	_lastSaved: number,
+	_isFetching: boolean,
+	_lastFetch: number,
 	_threads: {thread},
 	_connections: {RBXScriptConnection},
 	_logger: Logger.Logger?,
@@ -232,6 +240,10 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 	self._types = leaderboardTypes;
 	self._boards = {};
 	self._valueQueue = {};
+	self._lastSaved = 0;
+	self._isSaving = false;
+	self._lastFetch = 0;
+	self._isFetching = false;
 	self._threads = {};
 	self._connections = {};
 	self._logger = Logger.new("Leaderboard", debugMode or false);
@@ -246,31 +258,30 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 
 	-- Start automation
 	if (automationSettings and automationSettings.Automation) then
-		local Thread = Spawn(function()
-			local Times = 0;
+		table.insert(self._threads, Spawn(function()
+			local CalledTimes = 0;
 
 			while (true) do
-				Times += 1;
+				CalledTimes += 1;
 
 				-- Get the top and update the signal
-				local Data = self:GetRecords("All", automationSettings.RecordCount):awaitValue() :: {AllTopData};
-				if (Data) then
-					self.Updated:Fire(Data);
-					for _, board in Data do
+				local TopData = self:GetRecords("All", automationSettings.RecordCount):awaitValue() :: {AllTopData};
+				if (TopData) then
+					self.Updated:Fire(TopData);
+					for _, board in TopData do
 						self.BoardUpdated:Fire(board);
 					end;
 				end;
 
 				-- We work in alternating turns, so one loop we'll update the value queue, the next we'll update the actual store value(s)
-				if (Times % 2 == 0) then
+				if (CalledTimes % 2 == 0) then
 					-- Update the value from the queue
 					self:SaveValues();
 				end;
 
 				task.wait(automationSettings.Interval);
 			end;
-		end);
-		table.insert(self._threads, Thread);
+		end));
 	end;
 
 	-- Player removing
@@ -292,6 +303,8 @@ end
 ]=]
 function Leaderboard:SaveValues()
 	local Promises = {};
+	self._isSaving = true;
+
 	for UserId, BoardType in self._valueQueue do
 		for _, Data in BoardType do
 			local PromiseUpdate = Data.Board:Update(UserId, function(oldValue)
@@ -303,7 +316,10 @@ function Leaderboard:SaveValues()
 		end;
 	end;
 
-	return Promise.all(Promises);
+	return Promise.all(Promises):finally(function()
+		self._isSaving = false;
+		self._lastSaved = tick();
+	end);
 end
 
 -- Gets the data for all the top boards (should only be used every 90-120 seconds)
@@ -342,6 +358,8 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 		end;
 	end;
 
+	self._isFetching = true;
+
 	-- Get all the data
 	local Promises = {};
 	for boardType in boardTypes do
@@ -357,7 +375,10 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 		end));
 	end;
 
-	return Promise.all(Promises) :: Promise.TypedPromise<{AllTopData}>;
+	return Promise.all(Promises):finally(function()
+		self._isFetching = false;
+		self._lastFetch = tick();
+	end) :: Promise.TypedPromise<{AllTopData}>;
 end
 
 -- Increments the queued value(s)
@@ -474,24 +495,36 @@ end
 	Destroys the leaderboard
 ]=]
 function Leaderboard:Destroy()
-	-- Update the value from the queue
-	self:SaveValues();
+	if (not self._isSaving and not self._isFetching) then
+		local TimeSinceLastSaved = tick() - self._lastSaved;
+		local TimeSinceLastFetch = tick() - self._lastFetch;
+
+		--[[
+			If the lastSave was more than 2m ago and the lastFetch was more than 2m ago, OR the lastFetch was 0 and the lastSave was 0, then we should save the values
+			This is to prevent us saving the values if we just recently ran an operation
+			Unfortunately this is all we can do, and yes there could potentially be some people who don't get saved in the very last cycle
+		--]]
+		if ((TimeSinceLastSaved >= 60 * 2 and TimeSinceLastFetch >= 60 * 2) or (self._lastFetch == 0 and self._lastSaved == 0)) then
+			self._logger:Log(1, "Leaderboard:Destroy() Saving values");
+			self:SaveValues();
+		end;
+	end;
 
 	-- Destroy all the boards
-	for _, board in self._boards do
-		board:Destroy();
+	for _, GlobalBoard in self._boards do
+		GlobalBoard:Destroy();
 	end;
 
 	-- Cancel all the threads
-	for _, thread in self._threads do
-		if (typeof(thread) == "thread") then
-			Cancel(thread);
+	for _, Thread in self._threads do
+		if (typeof(Thread) == "thread") then
+			Cancel(Thread);
 		end;
 	end;
 
 	-- Disconnect all the connections
-	for _, connection in self._connections do
-		connection:Disconnect();
+	for _, Connection in self._connections do
+		Connection:Disconnect();
 	end;
 
 	-- Logger destroy
@@ -508,9 +541,9 @@ end
 
 -- Bind to close, destroy all the leaderboards
 game:BindToClose(function()
-	for _, leaderboard in Leaderboards do
+	for _, GlobalBoard in Leaderboards do
 		Spawn(function()
-			leaderboard:Destroy();
+			GlobalBoard:Destroy();
 		end)
 	end;
 end);

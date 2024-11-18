@@ -15,12 +15,6 @@ local GetDaysInMonth = Util.GetDaysInMonth;
 local Sha1 = Util.Sha1;
 local FALLBACK_EXPIRY_TIMES = Util.FALLBACK_EXPIRY_TIMES;
 local OFFLINE_ENVIRONMENT = game.GameId == 0;
--- local RECORDS_FETCING_MAP = {
--- 	["Hourly"] = 15,
--- 	["Daily"] = 25,
--- 	["Weekly"] = 30,
--- 	["Monthly"] = 35,
--- }
 
 --[=[
     @within MemoryShard
@@ -125,22 +119,21 @@ function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, s
 
 	for i = 1, shardCount do
 		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
+		if (OFFLINE_ENVIRONMENT) then
+			continue;
+		end;
 
-		if OFFLINE_ENVIRONMENT then
-			continue
-		end
+		local Success, Response = pcall(function()
+			return MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
+		end);
 
-		local success, response = pcall(function()
-			return MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i))
-		end)
-
-		if success then
+		if (Success) then
 			self._logger:Log(1, `Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
 		else
-			self._logger:Log(1, `Failed to create MemoryStoreSortedMap for _Shared{tostring(i)}: {response}`);
-		end
+			self._logger:Log(1, `Failed to create MemoryStoreSortedMap for _Shared{tostring(i)}: {Response}`);
+		end;
 
-		self._shards[i] = success and response or nil;
+		self._shards[i] = Success and Response or nil;
 	end;
 
 	return self;
@@ -232,17 +225,17 @@ function MemoryShard:_getAsync(userId)
 	local ShardKey = self:_getShardKey(userId);
 	local Shard = self._shards[ShardKey] or self._shards[1];
 	return Promise.new(function(resolve, reject)
-		local success, result = pcall(function()
-			if not Shard then
-				return
-			end
+		local Success, Result = pcall(function()
+			if (not Shard) then
+				return;
+			end;
 
 			return Shard:GetAsync(userId);
 		end);
-		if (not success) then
-			return reject(result);
+		if (not Success) then
+			return reject(Result);
 		end;
-		return resolve(result);
+		return resolve(Result);
 	end):catch(warn);
 end
 
@@ -260,17 +253,17 @@ function MemoryShard:_setAsync(userId, value, expiry, sortKey)
 	local ShardKey = self:_getShardKey(userId);
 	local Shard = self._shards[ShardKey] or self._shards[1];
 	return Promise.new(function(resolve, reject)
-		local success, result = pcall(function()
-			if not Shard then
-				return
-			end
+		local Success, Result = pcall(function()
+			if (not Shard) then
+				return;
+			end;
 
 			return Shard:SetAsync(userId, value, expiry, sortKey);
 		end);
-		if (not success) then
-			return reject(result);
+		if (not Success) then
+			return reject(Result);
 		end;
-		return resolve(result);
+		return resolve(Result);
 	end):catch(warn);
 end
 
@@ -287,17 +280,17 @@ function MemoryShard:_updateAsync(userId, transformer, expiry)
 	local ShardKey = self:_getShardKey(userId);
 	local Shard = self._shards[ShardKey] or self._shards[1];
 	return Promise.new(function(resolve, reject)
-		local success, result = pcall(function()
-			if not Shard then
-				return
-			end
+		local Success, Result = pcall(function()
+			if (not Shard) then
+				return;
+			end;
 
 			return Shard:UpdateAsync(userId, transformer, expiry);
 		end);
-		if (not success) then
-			return reject(result);
+		if (not Success) then
+			return reject(Result);
 		end;
-		return resolve(result);
+		return resolve(Result);
 	end):catch(warn);
 end
 
@@ -336,17 +329,17 @@ function MemoryShard:Get(topAmount, sortDirection)
 
 	local function ProcessShard(shard: MemoryStoreSortedMap)
 		return function()
-			local data = shard:GetRangeAsync(
+			local ShardData = shard:GetRangeAsync(
 				Enum.SortDirection[sortDirection],
 				100
-			)
+			);
 			if (self._isRollingExpiry) then
-				for _, record in data do
+				for _, record in ShardData do
 					-- get rid of expiry and creation date padding, convert back to number
 					record.value = tonumber(record.value.value);
 				end;
 			end;
-			return data;
+			return ShardData;
 		end;
 	end
 
@@ -354,11 +347,11 @@ function MemoryShard:Get(topAmount, sortDirection)
 	local Promises = {};
 	for _, Shard in self._shards do
 		local ShardPromise = Promise.new(function(resolve, reject)
-			local success, result = pcall(ProcessShard(Shard));
-			if (not success) then
-				return reject(result);
+			local Success, Result = pcall(ProcessShard(Shard));
+			if (not Success) then
+				return reject(Result);
 			end;
-			return resolve(result);
+			return resolve(Result);
 		end):andThen(function(data)
 			for _, record in data do
 				ProcessRecord(record);
@@ -405,22 +398,22 @@ function MemoryShard:Set(userId, value)
 	-- Rolling support
 	if (self._isRollingExpiry) then
 		return self:_getAsync(userId):andThen(function(oldValue)
-			local firstTime = oldValue == nil;
-			local created = if not firstTime then oldValue._created else nil
-			oldValue = if firstTime then 0 else Compression.Decompress(oldValue.value);
-			local transformedValue = (typeof(value) == "function" and value(oldValue) or value);
+			local FirstTime = oldValue == nil;
+			local Created = if not FirstTime then oldValue._created else nil
+			oldValue = if FirstTime then 0 else Compression.Decompress(oldValue.value);
+			local TransformedValue = (typeof(value) == "function" and value(oldValue) or value);
 
-			local compressedValue = Compression.Compress(transformedValue);
-			local newSortKey = transformedValue;
+			local CompressedValue = Compression.Compress(TransformedValue);
+			local NewSortKey = TransformedValue;
 
-			local newValue = {
-				value = compressedValue, -- this will be the value we save, we need to save as table to carry over creation data
-				_created = if firstTime then os.time() else created,
+			local NewValue = {
+				value = CompressedValue, -- this will be the value we save, we need to save as table to carry over creation data
+				_created = if FirstTime then os.time() else Created,
 				_expiry = self._fallbackExpiry
 			};
 
 			-- update the value with appropriate expiry time left
-			self:_setAsync(userId, newValue, newValue._expiry - (os.time() - newValue._created), newSortKey):catch(warn);
+			self:_setAsync(userId, NewValue, NewValue._expiry - (os.time() - NewValue._created), NewSortKey):catch(warn);
 			return true;
 		end);
 	end;
@@ -428,11 +421,11 @@ function MemoryShard:Set(userId, value)
 	-- Update the value
 	return self:_updateAsync(userId, function(oldValue)
 		oldValue = oldValue and Compression.Decompress(oldValue) or 0;
-		local transformedValue = (typeof(value) == "function") and value(oldValue) or value;
-		local compressedValue = Compression.Compress(transformedValue);
-		local newSortKey = transformedValue;
-		if (compressedValue and newSortKey) then
-			return compressedValue, newSortKey;
+		local TransformedValue = (typeof(value) == "function") and value(oldValue) or value;
+		local CompressedValue = Compression.Compress(TransformedValue);
+		local NewSortKey = TransformedValue;
+		if (CompressedValue and NewSortKey) then
+			return CompressedValue, NewSortKey;
 		end;
 	end, self:_getExpiry() or self._fallbackExpiry):catch(warn);
 end

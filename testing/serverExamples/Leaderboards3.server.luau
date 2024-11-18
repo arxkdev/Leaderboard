@@ -2,13 +2,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage");
 local Players = game:GetService("Players");
 
 local LeaderboardTemplate = ReplicatedStorage:WaitForChild("LeaderboardTemplate");
-local Lib = ReplicatedStorage:WaitForChild("src");
-local Leaderboard = require(Lib.Leaderboard);
+local Leaderboard = require(ReplicatedStorage:WaitForChild("Leaderboard"));
 
 type TopData = {Leaderboard.TopData};
 
 -- Constants
-local Key = "Gold2";
+local Key = "Gold10";
 local Leaderboards = {
 	-- Test for rolling
 	["15MinutesRolling"] = {60 * 15, `15MinutesRolling-{Key}`}, -- 15 minutes rolling leaderboard

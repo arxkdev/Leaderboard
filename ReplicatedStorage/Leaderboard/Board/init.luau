@@ -143,9 +143,9 @@ local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardTy
 		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
 	end;
 
-	if OFFLINE_ENVIRONMENT then
+	if (OFFLINE_ENVIRONMENT) then
 		return "OrderedDataStore", {} :: any
-	end
+	end;
 
 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
 end
@@ -169,7 +169,7 @@ function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rolling
 
 	-- New implementation: we just check if the current id is different from the previous one
 	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
-		local thread = Spawn(function()
+		table.insert(self._threads, Spawn(function()
 			local CurrentId = GetCurrentId(leaderboardType);
 			while (true) do
 				local NewId = GetCurrentId(leaderboardType);
@@ -179,8 +179,7 @@ function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rolling
 				end;
 				task.wait(5);
 			end;
-		end);
-		table.insert(self._threads, thread);
+		end));
 	end;
 
 	return self;
@@ -203,9 +202,9 @@ function Board:Get(amount, sortDirection)
 	sortDirection = sortDirection or "Descending";
 
 	local function RetrieveTopData()
-		if OFFLINE_ENVIRONMENT then
+		if (OFFLINE_ENVIRONMENT) then
 			return {} :: { TopData }
-		end
+		end;
 
 		if (self._storeType == "MemoryStore") then
 			local Result = self._store:Get(amount, sortDirection):awaitValue();
@@ -215,7 +214,7 @@ function Board:Get(amount, sortDirection)
 					resolve(Transform(rank, data.key, data.value))
 				end));
 			end;
-			return Promise.all(Promises):awaitValue() :: {TopData};
+			return Promise.all(Promises):awaitValue() :: { TopData };
 		else
 			-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
 			-- if (RequestBudget < 1) then
@@ -230,7 +229,7 @@ function Board:Get(amount, sortDirection)
 					resolve(Transform(rank, data.key, data.value))
 				end));
 			end;
-			return Promise.all(Promises):awaitValue() :: {TopData};
+			return Promise.all(Promises):awaitValue() :: { TopData };
 		end;
 	end;
 
@@ -243,7 +242,7 @@ function Board:Get(amount, sortDirection)
 			return reject(Result);
 		end;
 		return resolve(Result);
-	end) :: Promise.TypedPromise<{TopData}>;
+	end) :: Promise.TypedPromise<{ TopData }>;
 end
 
 -- Updates the data for a specific board (either MemoryStore (Shards), or OrderedDataStore)
@@ -274,30 +273,31 @@ function Board:Update(userId, value)
 	-- Using an actual DataStore, we need to set the data
 	return Promise.new(function(resolve, reject)
 		local Success, Result = pcall(function()
-			if OFFLINE_ENVIRONMENT then
-				return
-			end
+			if (OFFLINE_ENVIRONMENT) then
+				return;
+			end;
 
 			return self._store:UpdateAsync(userId, function(oldValue)
 				oldValue = oldValue and Compression.Decompress(oldValue) or 0;
-				local transformedValue = (type(value) == "function") and value(oldValue) or value;
+				local TransformedValue = (type(value) == "function") and value(oldValue) or value;
 
 				-- If their oldValue is greater than the new value, we don't want to update it
-				if (oldValue > transformedValue) then
+				if (oldValue > TransformedValue) then
 					return nil;
 				end;
 
-				if (type(transformedValue) == "number") then
-					local compressedValue = Compression.Compress(transformedValue);
-					return compressedValue;
+				if (type(TransformedValue) == "number") then
+					return Compression.Compress(TransformedValue);
 				end;
 				return nil;
 			end);
 		end);
+
 		if (not Success) then
 			warn(`Leaderboard had trouble updating data with error: {Result}`);
 			return reject(Result);
 		end;
+
 		self._logger:Log(1, `Successfully updated data for {userId} in {self._serviceKey}`);
 		return resolve(Result);
 	end) :: Promise.TypedPromise<boolean>;
@@ -309,9 +309,9 @@ end
 ]=]
 function Board:Destroy()
 	-- Destroy the threads
-	for _, thread in self._threads do
-		if (typeof(thread) == "thread") then
-			Cancel(thread);
+	for _, Thread in self._threads do
+		if (typeof(Thread) == "thread") then
+			Cancel(Thread);
 		end;
 	end;
 
