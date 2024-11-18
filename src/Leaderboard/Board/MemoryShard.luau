@@ -2,8 +2,9 @@
 local MemoryStoreService = game:GetService("MemoryStoreService");
 
 local Leaderboard = script.Parent.Parent;
+local Packages = Leaderboard.Packages;
+local Promise = require(Packages.Promise);
 local Util = require(Leaderboard.Util);
-local Promise = require(Leaderboard.Promise);
 local Logger = require(Leaderboard.Logger);
 
 -- Variables

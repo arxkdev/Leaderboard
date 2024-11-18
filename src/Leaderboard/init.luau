@@ -4,9 +4,10 @@
 local Players = game:GetService("Players");
 
 -- Requirements
+local Packages = script.Packages;
 local Util = require(script.Util);
-local Signal = require(script.Signal);
-local Promise = require(script.Promise);
+local Signal = require(Packages.Signal);
+local Promise = require(Packages.Promise);
 local Board = require(script.Board);
 local Logger = require(script.Logger);
 
@@ -252,7 +253,7 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 				Times += 1;
 
 				-- Get the top and update the signal
-				local Data = self:GetRecords("All", automationSettings.RecordCount):awaitValue();
+				local Data = self:GetRecords("All", automationSettings.RecordCount):awaitValue() :: {AllTopData};
 				if (Data) then
 					self.Updated:Fire(Data);
 					for _, board in Data do
