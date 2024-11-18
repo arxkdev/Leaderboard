@@ -38,10 +38,6 @@ description = "Leaderboard is a lightweight performance friendly library that is
 section = "Leaderboard"
 classes = ["Leaderboard", "Board", "MemoryShard", "Logger"]
 
-[[classOrder]]
-section = "Util"
-classes = ["Promise", "Signal", "Error"]
-
 [footer]
 style = "dark"
-copyright = "Copyright © 2023 Arxk. Built with Moonwave and Docusaurus"
+copyright = "Copyright © 2024 Arxk. Built with Moonwave and Docusaurus"
