@@ -32,6 +32,7 @@ export type MemoryShard = typeof(setmetatable({} :: MemoryShardArguments, {} :: 
 	@within MemoryShard
 	@interface MemoryShardArguments
 	@field _type LeaderboardType
+	@field _boardKey string
 	@field _fallbackExpiry number
 	@field _isRollingExpiry boolean
 	@field _shards {MemoryStoreSortedMap}
@@ -40,6 +41,7 @@ export type MemoryShard = typeof(setmetatable({} :: MemoryShardArguments, {} :: 
 ]=]
 export type MemoryShardArguments = {
 	_type: LeaderboardType,
+	_boardKey: string,
 	_fallbackExpiry: number,
 	_isRollingExpiry: boolean,
 	_shards: {MemoryStoreSortedMap},
@@ -75,7 +77,7 @@ export type TopData = {
 	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: MemoryShard) -> ()
-	@field new (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard
+	@field new (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard
 ]=]
 type Object = {
 	__index: Object,
@@ -87,7 +89,7 @@ type Object = {
 	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: MemoryShard) -> (),
-	new: (leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard,
+	new: (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard,
 }
 
 --[=[
@@ -98,9 +100,17 @@ type Object = {
 local MemoryShard: Object = {} :: Object;
 MemoryShard.__index = MemoryShard;
 
+local function GetResultCount(shardCount: number): number
+	-- Depending on how many shards there are the result count should be based on
+	-- For example, 1 shard is 100 records, 2 shards is 50 records, 4 shards is 25 records, 10 shards is 10 records
+	local BASE = 100;
+	local RECORD_COUNT = math.ceil(BASE / shardCount);
+	return math.max(RECORD_COUNT, 1);
+end
+
 --[=[
 	@param leaderboardType LeaderboardType
-	@param serviceKey string
+	@param boardKey string
 	@param shardCount number
 	@param rollingExpiry number?
 	@param debugMode boolean?
@@ -108,32 +118,33 @@ MemoryShard.__index = MemoryShard;
 	Creates a new MemoryShard. This is not a viable solution anymore, as the limits to MemoryStoreService are too poor.
 	See: https://devforum.roblox.com/t/introducing-memorystore-sortedmap-sortkey-beta/2673559/23
 ]=]
-function MemoryShard.new(leaderboardType: LeaderboardType, serviceKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?)
+function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?)
 	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
 	self._shards = {};
 	self._shardCount = shardCount;
 	self._type = leaderboardType;
 	self._isRollingExpiry = rollingExpiry ~= nil;
 	self._fallbackExpiry = (rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self._type];
+	self._boardKey = boardKey;
 	self._logger = Logger.new("MemoryShard", debugMode or false);
 
-	for i = 1, shardCount do
-		-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
+	-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
+	for Index = 1, shardCount do
 		if (OFFLINE_ENVIRONMENT) then
 			continue;
 		end;
 
 		local Success, Response = pcall(function()
-			return MemoryStoreService:GetSortedMap(serviceKey .. "_Shard" .. tostring(i));
+			return MemoryStoreService:GetSortedMap(`{boardKey}_Shard{Index}`);
 		end);
 
 		if (Success) then
-			self._logger:Log(1, `Created MemoryStoreSortedMap for _Shared{tostring(i)}`);
+			self._logger:Log(1, `Created MemoryStoreSortedMap for "{boardKey}_Shard{Index}"`);
 		else
-			self._logger:Log(1, `Failed to create MemoryStoreSortedMap for _Shared{tostring(i)}: {Response}`);
+			self._logger:Log(1, `Failed to create MemoryStoreSortedMap for "{boardKey}_Shard{Index}": {Response}`);
 		end;
 
-		self._shards[i] = Success and Response or nil;
+		self._shards[Index] = Success and Response or nil;
 	end;
 
 	return self;
@@ -224,6 +235,7 @@ end
 function MemoryShard:_getAsync(userId)
 	local ShardKey = self:_getShardKey(userId);
 	local Shard = self._shards[ShardKey] or self._shards[1];
+
 	return Promise.new(function(resolve, reject)
 		local Success, Result = pcall(function()
 			if (not Shard) then
@@ -252,6 +264,7 @@ end
 function MemoryShard:_setAsync(userId, value, expiry, sortKey)
 	local ShardKey = self:_getShardKey(userId);
 	local Shard = self._shards[ShardKey] or self._shards[1];
+
 	return Promise.new(function(resolve, reject)
 		local Success, Result = pcall(function()
 			if (not Shard) then
@@ -279,6 +292,7 @@ end
 function MemoryShard:_updateAsync(userId, transformer, expiry)
 	local ShardKey = self:_getShardKey(userId);
 	local Shard = self._shards[ShardKey] or self._shards[1];
+
 	return Promise.new(function(resolve, reject)
 		local Success, Result = pcall(function()
 			if (not Shard) then
@@ -308,7 +322,12 @@ function MemoryShard:Get(topAmount, sortDirection)
 	SmartAssert(sortDirection, "sortDirection must be provided");
 	SmartAssert(typeof(topAmount) == "number", "topAmount must be a number");
 	SmartAssert(typeof(sortDirection) == "string", "sortDirection must be a string");
+
 	local CombinedResults = {};
+	local ResultsToFetch = GetResultCount(self._shardCount);
+
+	self._logger:Log(1, `[{self._boardKey}]: Fetching {ResultsToFetch} records in {self._type}`);
+	-- print(`[{self._boardKey}]: Fetching {ResultsToFetch} records in {self._type}`);
 
 	local function ProcessRecord(record: {key: string, value: number})
 		local IndexFound, Found = FoundInTable(CombinedResults, tonumber(record.key));
@@ -331,14 +350,16 @@ function MemoryShard:Get(topAmount, sortDirection)
 		return function()
 			local ShardData = shard:GetRangeAsync(
 				Enum.SortDirection[sortDirection],
-				100
+				ResultsToFetch
 			);
+
 			if (self._isRollingExpiry) then
 				for _, record in ShardData do
 					-- get rid of expiry and creation date padding, convert back to number
 					record.value = tonumber(record.value.value);
 				end;
 			end;
+
 			return ShardData;
 		end;
 	end
@@ -375,8 +396,8 @@ function MemoryShard:Get(topAmount, sortDirection)
 		end;
 
 		return CombinedResults;
-	end):catch(function(error)
-		warn("An error occurred while processing shards: " .. error);
+	end):catch(function(err: string)
+		warn(`An error occurred while processing shards: {err}`);
 	end);
 end
 
@@ -424,6 +445,11 @@ function MemoryShard:Set(userId, value)
 		local TransformedValue = (typeof(value) == "function") and value(oldValue) or value;
 		local CompressedValue = Compression.Compress(TransformedValue);
 		local NewSortKey = TransformedValue;
+
+		-- Get size of Value
+		-- local ValueSize = string.len(HttpService:JSONEncode(CompressedValue));
+		-- print(`ValueSize of {ValueSize} for {userId} in {self._boardKey}`);
+
 		if (CompressedValue and NewSortKey) then
 			return CompressedValue, NewSortKey;
 		end;

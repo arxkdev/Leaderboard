@@ -7,9 +7,8 @@ local Leaderboard = require(ReplicatedStorage:WaitForChild("Leaderboard"));
 type TopData = {Leaderboard.TopData};
 
 -- Constants
-local Key = "Gold10";
+local Key = `Gold-{11}`;
 local Leaderboards = {
-	-- Test for rolling
 	["15MinutesRolling"] = {60 * 15, `15MinutesRolling-{Key}`}, -- 15 minutes rolling leaderboard
 	["30MinutesRolling"] = {60 * 30, `30MinutesRolling-{Key}`}, -- 30 minutes rolling leaderboard
 };
@@ -19,9 +18,9 @@ local GoldLeaderboard = Leaderboard.new(Leaderboards, {
 	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
 });
 
-local function UpdateBoard(data: TopData, model: Model)
+local function UpdateBoard(data: TopData, part: BasePart)
 	-- Remove current items
-	for _, v in model.BoardPart.UI.List:GetChildren() do
+	for _, v in part.UI.List:GetChildren() do
 		if (not v:IsA("GuiObject")) then continue end;
 		v:Destroy();
 	end;
@@ -35,9 +34,10 @@ local function UpdateBoard(data: TopData, model: Model)
 		item.LayoutOrder = i
 		item["Value"].Text = v.Value;
 		item.LayoutOrder = v.Rank;
-		item.Parent = model.BoardPart.UI.List;
+		item.Parent = part.UI.List;
 	end;
 end
+
 local function IncrementGoldTest()
 	for _, player in Players:GetPlayers() do
 		GoldLeaderboard:IncrementValues(Leaderboards, player.UserId, 111);
@@ -57,8 +57,8 @@ end
 GoldLeaderboard.Updated:Connect(function(boards)
 	-- Returns us a table of all the boards that were updated
 	for _, board in boards do
-		print(`[Gold] Updating board {board.Type} - with {#board.Data} items!`);
-		UpdateBoard(board.Data, workspace.Test3.Leaderboards[board.Type]);
+		print(`[Gold] Updating board {board.Type} - with {#board.Data} entries!`);
+		UpdateBoard(board.Data, workspace.Leaderboards["Gold"][board.Type]);
 	end;
 
 	-- Increment

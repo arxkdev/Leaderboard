@@ -20,9 +20,10 @@ local Cancel = task.cancel;
 
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = Util.MEMORY_STORE_SERVICE_MAX_EXPIRY;
+local MEMORY_STORE_SERVICE_MIN_EXPIRY = Util.MEMORY_STORE_SERVICE_MIN_EXPIRY;
 local BOARD_TYPES = Util.BOARD_TYPES;
-local MAX_OVERALL_LEADERBOARDS = 4; -- Overall, you can only create 4 leaderboards using Leaderboard.new, this is to prevent rate limiting
-local MAX_BOARDS = 7; -- You can only create up to 7 boards per leaderboard
+local MAX_OVERALL_LEADERBOARDS = Util.MAX_OVERALL_LEADERBOARDS;
+local MAX_BOARDS = Util.MAX_BOARDS;
 
 --[=[
 	@within Leaderboard
@@ -196,7 +197,7 @@ Leaderboard.__index = Leaderboard;
 local function IsValidLeaderboardType(leaderboardType: LeaderboardType, boardKey: string | {number & string}): boolean
 	if (type(boardKey) == "table") then
 		local RollingExpiry = type(boardKey) == "table" and boardKey[1] or nil;
-		return RollingExpiry >= 60 and RollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY;
+		return RollingExpiry >= MEMORY_STORE_SERVICE_MIN_EXPIRY and RollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY;
 	end;
 	return table.find(BOARD_TYPES, leaderboardType) ~= nil;
 end
@@ -262,23 +263,22 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 			local CalledTimes = 0;
 
 			while (true) do
-				CalledTimes += 1;
+				-- Update the value from the queue
+				self:SaveValues();
 
-				-- Get the top and update the signal
-				local TopData = self:GetRecords("All", automationSettings.RecordCount):awaitValue() :: {AllTopData};
-				if (TopData) then
-					self.Updated:Fire(TopData);
-					for _, board in TopData do
-						self.BoardUpdated:Fire(board);
+				-- We work in alternating turns, so one loop we'll update the value queue, the next we'll update the actual store value(s)
+				if (CalledTimes % 2 == 0 or CalledTimes == 0) then
+					-- Get the top and update the signal
+					local TopData = self:GetRecords("All", automationSettings.RecordCount):awaitValue() :: {AllTopData};
+					if (TopData) then
+						self.Updated:Fire(TopData);
+						for _, board in TopData do
+							self.BoardUpdated:Fire(board);
+						end;
 					end;
 				end;
 
-				-- We work in alternating turns, so one loop we'll update the value queue, the next we'll update the actual store value(s)
-				if (CalledTimes % 2 == 0) then
-					-- Update the value from the queue
-					self:SaveValues();
-				end;
-
+				CalledTimes += 1;
 				task.wait(automationSettings.Interval);
 			end;
 		end));
@@ -350,7 +350,7 @@ function Leaderboard:GetRecords(boardTypes, optionalRange, sortDirection)
 			SmartAssert(optionalRange > 0, "Optional range must be greater than 0");
 		else
 			for k, v in optionalRange do
-				SmartAssert(IsValidLeaderboardType(k, v), `Leaderboard type {k} is not valid`);
+				SmartAssert(IsValidLeaderboardType(k, v), `Leaderboard type "{k}" is not valid`);
 				SmartAssert(type(v) == "number", "Optional range values must be a number");
 				SmartAssert(v <= 100, "You can only get the top 100.");
 				SmartAssert(v > 0, "Optional range values must be greater than 0");
@@ -483,7 +483,7 @@ function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 	for boardType in boardTypes do
 		local BoardClass = self._boards[boardType] :: Board;
 		if (not BoardClass) then
-			error(`Board type {boardType} does not exist`, 2);
+			error(`Board Type "{boardType}" does not exist`, 2);
 		end;
 
 		BoardClass:Update(userId, value);

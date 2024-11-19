@@ -1,6 +1,6 @@
 local Players = game:GetService("Players");
-local UserIdsCache = {};
 
+local UserIdsCache = {};
 local Processing = {};
 local CachedUsernames = {};
 

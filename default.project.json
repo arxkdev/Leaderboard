@@ -6,7 +6,7 @@
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "$ignoreUnknownInstances": true,
-      "$path": "ReplicatedStorage"
+      "$path": "lib"
     },
 
     "ServerScriptService": {

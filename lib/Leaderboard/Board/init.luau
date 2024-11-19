@@ -21,12 +21,7 @@ local Spawn = task.spawn;
 
 -- Constants
 local OFFLINE_ENVIRONMENT = game.GameId == 0;
-local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your game does have
-	["Hourly"] = 2,
-	["Daily"] = 3,
-	["Weekly"] = 3,
-	["Monthly"] = 4,
-}
+local SHARD_COUNTS = Util.SHARD_COUNTS;
 
 -- Supports Daily, Weekly, Monthly and AllTime currently
 --[=[
@@ -44,14 +39,14 @@ export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
 --[=[
 	@within Board
 	@interface BoardArguments
-	@field _serviceKey string
+	@field _boardKey string
 	@field _storeUsing string
 	@field _store (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?
 	@field _threads {thread}
 ]=]
 export type BoardArguments = {
 	_type: LeaderboardType,
-	_serviceKey: string,
+	_boardKey: string,
 	_storeUsing: string,
 	_store: (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?,
 	_threads: {thread},
@@ -84,14 +79,14 @@ type MemoryShard = MemoryShard.MemoryShard;
 	@field Update (self: Board, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: Board) -> ()
-	@field new (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?) -> Board
+	@field new (boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?) -> Board
 ]=]
 type Object = {
 	__index: Object,
 	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Board) -> (),
-	new: (serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?) -> Board,
+	new: (boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?) -> Board,
 }
 
 --[=[
@@ -117,7 +112,12 @@ end
 -- end
 
 local function ShardCalculation(rollingExpiry: number): number
-	return math.round(math.log10(rollingExpiry * 6));
+	return math.round(
+		math.max(
+			1,
+			math.log10(rollingExpiry) - 3
+		)
+	);
 end
 
 local function GetCurrentId(leaderboardType: string)
@@ -130,28 +130,37 @@ local function GetCurrentId(leaderboardType: string)
 	return leaderboardType == "Hourly" and CurrentHour or leaderboardType == "Daily" and CurrentDay or leaderboardType == "Weekly" and CurrentWeek or leaderboardType == "Monthly" and CurrentMonth or leaderboardType == "Yearly" and CurrentYear or "AllTime" and "AllTime";
 end
 
-local function ConstructStore(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?)
+local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?)
 	-- print(rollingExpiry);
 	-- if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
-	-- 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{GetCurrentId(leaderboardType)}-{serviceKey}`);
+	-- 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{GetCurrentId(leaderboardType)}-{boardKey}`);
 	-- end;
 
 	-- If we are using a MemoryStore, we can just update the data
 	-- Not a viable solution anymore, limits are too poor
 	if (leaderboardType ~= "AllTime" or rollingExpiry) then
 		local ShardCount = rollingExpiry and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
-		return "MemoryStore", MemoryShard.new(leaderboardType, serviceKey, ShardCount, rollingExpiry);
+		return "MemoryStore", MemoryShard.new(leaderboardType, boardKey, ShardCount, rollingExpiry);
 	end;
 
+	-- If we are in an offline enviornment
 	if (OFFLINE_ENVIRONMENT) then
 		return "OrderedDataStore", {} :: any
 	end;
 
-	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(serviceKey);
+	local Success, Result = pcall(function()
+		return DataStoreService:GetOrderedDataStore(boardKey);
+	end);
+	if (not Success) then
+		warn(`Failed to create OrderedDataStore for "{boardKey}": {Result}`);
+		return "OrderedDataStore", {} :: any
+	end;
+
+	return "OrderedDataStore", Result;
 end
 
 --[=[
-	@param serviceKey string
+	@param boardKey string
 	@param leaderboardType LeaderboardType
 	@param rollingExpiry number?
 	@param debugMode boolean?
@@ -159,13 +168,13 @@ end
 
 	Creates a new board within the Leaderboard.
 ]=]
-function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?): Board
+function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?): Board
 	local self = setmetatable({} :: BoardArguments, Board);
 
-	self._serviceKey = serviceKey;
-	self._storeType, self._store = ConstructStore(serviceKey, leaderboardType, rollingExpiry);
+	self._boardKey = boardKey;
+	self._storeType, self._store = ConstructStore(boardKey, leaderboardType, rollingExpiry);
 	self._threads = {};
-	self._logger = Logger.new(`Board-{serviceKey}`, debugMode or false);
+	self._logger = Logger.new(`Board-{boardKey}`, debugMode or false);
 
 	-- New implementation: we just check if the current id is different from the previous one
 	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
@@ -175,7 +184,7 @@ function Board.new(serviceKey: string, leaderboardType: LeaderboardType, rolling
 				local NewId = GetCurrentId(leaderboardType);
 				if (NewId ~= CurrentId) then
 					CurrentId = NewId;
-					self._storeType, self._store = ConstructStore(serviceKey, leaderboardType);
+					self._storeType, self._store = ConstructStore(boardKey, leaderboardType);
 				end;
 				task.wait(5);
 			end;
@@ -218,10 +227,10 @@ function Board:Get(amount, sortDirection)
 		else
 			-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
 			-- if (RequestBudget < 1) then
-			-- 	warn(`Skipping getting top data for {self._serviceKey} due to insufficient budget`);
+			-- 	warn(`Skipping getting top data for {self._boardKey} due to insufficient budget`);
 			-- 	return {};
 			-- end;
-			local Result = self._store:GetSortedAsync(if sortDirection == "Descending" then false else true, amount);
+			local Result = self._store:GetSortedAsync(sortDirection ~= "Descending", amount);
 			local Data = Result:GetCurrentPage() :: {any};
 			local Promises = {};
 			for rank, data in pairs(Data) do
@@ -260,13 +269,13 @@ function Board:Update(userId, value)
 
 	-- If we are using a MemoryStore, we can just update the data
 	if (self._storeType == "MemoryStore") then
-		self._logger:Log(1, `Successfully updated data for ${userId} in {self._serviceKey}`);
+		self._logger:Log(1, `Successfully updated data for ${userId} in "{self._boardKey}"`);
 		return self._store:Set(userId, value);
 	end;
 
 	-- local Budget = GetRequestBudget(Enum.DataStoreRequestType.UpdateAsync);
 	-- if (Budget < 1) then
-	-- 	warn(`Skipping updating data for {userId} in {self._serviceKey} due to insufficient budget`);
+	-- 	warn(`Skipping updating data for {userId} in {self._boardKey} due to insufficient budget`);
 	-- 	return false;
 	-- end;
 
@@ -298,7 +307,7 @@ function Board:Update(userId, value)
 			return reject(Result);
 		end;
 
-		self._logger:Log(1, `Successfully updated data for {userId} in {self._serviceKey}`);
+		self._logger:Log(1, `Successfully updated data for "{userId}" in "{self._boardKey}"`);
 		return resolve(Result);
 	end) :: Promise.TypedPromise<boolean>;
 end
