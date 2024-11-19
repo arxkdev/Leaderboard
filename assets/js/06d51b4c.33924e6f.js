@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkdocs=self.webpackChunkdocs||[]).push([[692],{63891:e=>{e.exports=JSON.parse('{"sourceUrl":"https://github.com/arxkdev/Leaderboard/blob/main","baseUrl":"/Leaderboard/","classOrder":[{"section":"Leaderboard","classes":["Leaderboard","Board","MemoryShard","Logger"]},{"section":"Util","classes":["Promise","Signal","Error"]}],"apiCategories":[]}')}}]);
