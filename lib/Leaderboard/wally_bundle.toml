@@ -1,0 +1,9 @@
+[package]
+name = "arxkdev/leaderboard-bundle"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+Promise = "arxkdev/typed-promise@4.0.2"
+Signal = "sleitnick/signal@1.3.0"

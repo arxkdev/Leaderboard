@@ -6,7 +6,7 @@
 local DataStoreService = game:GetService("DataStoreService");
 
 -- Requirements
-local Packages = script.Parent.Packages;
+local Packages = script.Parent.Parent;
 local MemoryShard = require(script.MemoryShard);
 local Promise = require(Packages.Promise);
 local Util = require(script.Parent.Util);
