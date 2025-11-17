@@ -13,7 +13,7 @@ favicon = "/favicon.png"
 organizationName = "arxkdev"
 projectName = "Leaderboard"
 url = "https://leaderboard.arxk.cloud"
-baseUrl = "/Leaderboard/"
+baseUrl = "/"
 tagline = "Create and manage timed Global Leaderboards with ease."
 
 [home]
