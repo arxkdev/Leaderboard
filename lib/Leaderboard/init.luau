@@ -328,7 +328,7 @@ function Leaderboard:SaveValues()
 					end;
 				elseif Data.OperationType == "Increment" then
 					-- Increment operation: add the amount
-					if type(Data.Amount) == "function" then -- confirm this is correct
+					if type(Data.Amount) == "function" then
 						return oldValue + Data.Amount(oldValue);
 					else
 						return oldValue + Data.Amount;
