@@ -12,7 +12,7 @@ favicon = "/favicon.png"
 # From git:
 organizationName = "arxkdev"
 projectName = "Leaderboard"
-url = "https://gh.arxk.cloud"
+url = "https://leaderboard.arxk.cloud"
 baseUrl = "/Leaderboard/"
 tagline = "Create and manage timed Global Leaderboards with ease."
 
