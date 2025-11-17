@@ -109,6 +109,16 @@ export type LeaderboardArguments = {
 
 --[=[
 	@within Leaderboard
+	@type OperationType "Set" | "Increment"
+	
+	The type of operation to perform on the leaderboard value.
+	- "Set": Sets the value to the specified amount or result of the transform function
+	- "Increment": Adds the specified amount or result of the transform function to the current value
+]=]
+export type OperationType = "Set" | "Increment";
+
+--[=[
+	@within Leaderboard
 	@interface Board
 	@field GetRecords (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Update (self: Board, userId: number, value: number | (number) -> (number)) -> boolean
@@ -117,8 +127,9 @@ export type LeaderboardArguments = {
 type ValueQueueType = {
 	[number]: {
 		[LeaderboardType]: {
-			Amount: number,
+			Amount: number | ((number) -> number),
 			Board: Board,
+			OperationType: OperationType,
 		},
 	},
 }
@@ -308,7 +319,23 @@ function Leaderboard:SaveValues()
 	for UserId, BoardType in self._valueQueue do
 		for _, Data in BoardType do
 			local PromiseUpdate = Data.Board:Update(UserId, function(oldValue)
-				return (oldValue + Data.Amount); -- Increment the value
+				if Data.OperationType == "Set" then
+					-- Set operation: use the value/function directly
+					if type(Data.Amount) == "function" then
+						return Data.Amount(oldValue);
+					else
+						return Data.Amount;
+					end;
+				elseif Data.OperationType == "Increment" then
+					-- Increment operation: add the amount
+					if type(Data.Amount) == "function" then -- confirm this is correct
+						return oldValue + Data.Amount(oldValue);
+					else
+						return oldValue + Data.Amount;
+					end;
+				else
+					error(`Invalid operation type: {Data.OperationType}`, 2);
+				end;
 			end):andThen(function()
 				self._valueQueue[UserId] = nil;
 			end);
@@ -412,7 +439,8 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 		if (not Queue[boardType]) then
 			Queue[boardType] = {
 				Amount = amount,
-				Board = self._boards[boardType]
+				Board = self._boards[boardType],
+				OperationType = "Increment",
 			};
 		else
 			Queue[boardType].Amount += amount;
@@ -448,14 +476,12 @@ function Leaderboard:SetValues(boardTypes, userId, value)
 	local Queue = self._valueQueue[userId];
 	for boardType in boardTypes do
 		-- Update the value queue
-		if (not Queue[boardType]) then
-			Queue[boardType] = {
-				Amount = value,
-				Board = self._boards[boardType],
-			};
-		else
-			Queue[boardType].Amount = value;
-		end;
+		-- For set operations, always replace the value (don't accumulate)
+		Queue[boardType] = {
+			Amount = value,
+			Board = self._boards[boardType],
+			OperationType = "Set",
+		};
 	end;
 end
 
