@@ -3,7 +3,7 @@
 
 <div align="center">
 	<h1>Leaderboard</h1>
-	<a href="https://arxk.io/Leaderboard/"><strong>View docs</strong></a>
+	<a href="https://arxk.cloud/Leaderboard/"><strong>View docs</strong></a>
 </div>
 
 <br />
