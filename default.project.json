@@ -10,8 +10,10 @@
     },
 
     "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "$ignoreUnknownInstances": true,
       "ServerExamples": {
-        "$path": "testing/serverExamples"
+        "$path": "testing/ServerExamples"
       }
     }
   }

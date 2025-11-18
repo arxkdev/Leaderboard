@@ -1,10 +1,10 @@
 --[[
-	Arxk @ 2023
+	Arxk @ 2025
 ]]
 local Players = game:GetService("Players");
 
 -- Requirements
-local Packages = script.Parent;
+local Packages = script.Packages;
 local Util = require(script.Util);
 local Signal = require(Packages.Signal);
 local Promise = require(Packages.Promise);
@@ -319,25 +319,28 @@ function Leaderboard:SaveValues()
 	for UserId, BoardType in self._valueQueue do
 		for _, Data in BoardType do
 			local PromiseUpdate = Data.Board:Update(UserId, function(oldValue)
-				if Data.OperationType == "Set" then
+				if (Data.OperationType == "Set") then
 					-- Set operation: use the value/function directly
-					if type(Data.Amount) == "function" then
+					if (type(Data.Amount) == "function") then
 						return Data.Amount(oldValue);
 					else
 						return Data.Amount;
 					end;
-				elseif Data.OperationType == "Increment" then
+				elseif (Data.OperationType == "Increment") then
 					-- Increment operation: add the amount
-					if type(Data.Amount) == "function" then
+					if (type(Data.Amount) == "function") then
 						return oldValue + Data.Amount(oldValue);
 					else
 						return oldValue + Data.Amount;
 					end;
 				else
-					error(`Invalid operation type: {Data.OperationType}`, 2);
+					self._logger:Log(3, `Invalid operation type: {Data.OperationType} for user {UserId}`);
+					return oldValue;
 				end;
 			end):andThen(function()
 				self._valueQueue[UserId] = nil;
+			end):catch(function(err)
+				self._logger:Log(3, `Error updating value for user {UserId}: {err}`);
 			end);
 			table.insert(Promises, PromiseUpdate);
 		end;
@@ -509,7 +512,8 @@ function Leaderboard:UpdateStoreValues(boardTypes, userId, value)
 	for boardType in boardTypes do
 		local BoardClass = self._boards[boardType] :: Board;
 		if (not BoardClass) then
-			error(`Board Type "{boardType}" does not exist`, 2);
+			self._logger:Log(3, `Board Type "{boardType}" does not exist for user {userId}`);
+			continue;
 		end;
 
 		BoardClass:Update(userId, value);

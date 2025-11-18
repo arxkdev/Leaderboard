@@ -7,7 +7,7 @@ local Leaderboard = require(ReplicatedStorage:WaitForChild("Leaderboard"));
 type TopData = {Leaderboard.TopData};
 
 -- Constants
-local Key = `Money-{11}`;
+local Key = `Money-{12}`;
 local Leaderboards = {
 	["Hourly"] = `Hourly-{Key}`,
 	["Daily"] = `Daily-{Key}`,

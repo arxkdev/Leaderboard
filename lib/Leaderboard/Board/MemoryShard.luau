@@ -2,7 +2,7 @@
 local MemoryStoreService = game:GetService("MemoryStoreService");
 
 local Leaderboard = script.Parent.Parent;
-local Packages = Leaderboard.Parent;
+local Packages = Leaderboard.Packages;
 local Promise = require(Packages.Promise);
 local Util = require(Leaderboard.Util);
 local Logger = require(Leaderboard.Logger);
@@ -12,7 +12,7 @@ local Compression = Util.Compression;
 local SmartAssert = Util.SmartAssert;
 local FoundInTable = Util.FoundInTable;
 local GetDaysInMonth = Util.GetDaysInMonth;
-local Sha1 = Util.Sha1;
+local FNV_1A_32 = Util.FNV_1A_32;
 local FALLBACK_EXPIRY_TIMES = Util.FALLBACK_EXPIRY_TIMES;
 local OFFLINE_ENVIRONMENT = game.GameId == 0;
 
@@ -216,12 +216,8 @@ function MemoryShard:_getShardKey(userId)
 	SmartAssert(userId, "userId must be provided");
 	SmartAssert(typeof(userId) == "number", "userId must be a number");
 
-	-- Get the SHA-256 hash of the userId
-	local ShaHash = Sha1.sha1(tostring(userId));
-	local HashPrefix = tonumber(string.sub(ShaHash, 1, 8), 16);
-
 	-- Use the modulo operation to get the shard index
-	local ShardIndex = (HashPrefix % self._shardCount) + 1;
+	local ShardIndex = (FNV_1A_32(tostring(userId)) % self._shardCount) + 1;
 	return ShardIndex;
 end
 
@@ -327,7 +323,6 @@ function MemoryShard:Get(topAmount, sortDirection)
 	local ResultsToFetch = GetResultCount(self._shardCount);
 
 	self._logger:Log(1, `[{self._boardKey}]: Fetching {ResultsToFetch} records in {self._type}`);
-	-- print(`[{self._boardKey}]: Fetching {ResultsToFetch} records in {self._type}`);
 
 	local function ProcessRecord(record: {key: string, value: number})
 		local IndexFound, Found = FoundInTable(CombinedResults, tonumber(record.key));
@@ -445,10 +440,6 @@ function MemoryShard:Set(userId, value)
 		local TransformedValue = (typeof(value) == "function") and value(oldValue) or value;
 		local CompressedValue = Compression.Compress(TransformedValue);
 		local NewSortKey = TransformedValue;
-
-		-- Get size of Value
-		-- local ValueSize = string.len(HttpService:JSONEncode(CompressedValue));
-		-- print(`ValueSize of {ValueSize} for {userId} in {self._boardKey}`);
 
 		if (CompressedValue and NewSortKey) then
 			return CompressedValue, NewSortKey;

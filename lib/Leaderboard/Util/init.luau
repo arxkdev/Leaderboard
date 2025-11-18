@@ -2,7 +2,7 @@ local HttpService = game:GetService("HttpService");
 
 -- Requirements
 local Compression = require(script.Compression);
-local Sha1 = require(script.Sha1);
+local FNV_1A_32 = require(script.FNV_1a);
 
 local Util = {};
 
@@ -85,7 +85,7 @@ Util.FoundInTable = FoundInTable;
 Util.GetDaysInMonth = GetDaysInMonth;
 Util.KeysInDictionary = KeysInDictionary;
 Util.Compression = Compression;
-Util.Sha1 = Sha1;
+Util.FNV_1A_32 = FNV_1A_32;
 Util.GenerateGUID = GenerateGUID;
 Util.BOARD_TYPES = BOARD_TYPES;
 Util.MEMORY_STORE_SERVICE_MAX_EXPIRY = MEMORY_STORE_SERVICE_MAX_EXPIRY;
@@ -107,7 +107,7 @@ return Util :: {
 	GetDaysInMonth: () -> number;
 	Compression: typeof(Compression);
 	KeysInDictionary: ({any}) -> {any};
-	Sha1: typeof(Sha1);
+	FNV_1A_32: typeof(FNV_1A_32);
 	GenerateGUID: () -> string;
 	BOARD_TYPES: {string};
 	MEMORY_STORE_SERVICE_MAX_EXPIRY: number;
