@@ -519,7 +519,7 @@ end
 	@return Promise.TypedPromise<boolean>
 	@yields
 
-	Removes a specific shard.
+	Removes the key from a specific shard.
 ]=]
 function MemoryShard:_removeKeyFromShard(shardIndex: number, key: string)
 	return Promise.new(function(resolve, reject)
