@@ -1,10 +1,13 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage");
 local Players = game:GetService("Players");
+local RunService = game:GetService("RunService");
 
 local LeaderboardTemplate = ReplicatedStorage:WaitForChild("LeaderboardTemplate");
 local Leaderboard = require(ReplicatedStorage:WaitForChild("Leaderboard"));
 
 type TopData = {Leaderboard.TopData};
+
+local DEBUG = RunService:IsStudio();
 
 -- Constants
 local Key = `Money-{12}`;
@@ -19,7 +22,7 @@ local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
 	Interval = 120,
 	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
-});
+}, DEBUG);
 
 local function UpdateBoard(data: TopData, part: BasePart)
 	-- Remove current items
@@ -52,7 +55,7 @@ local function IncrementMoneyTest()
 	MoneyLeaderboard:IncrementValues(Leaderboards, FakeId2, 100);
 
 	-- Larger scale test
-	for _ = 1, 10 do
+	for _ = 1, 100 do
 		MoneyLeaderboard:IncrementValues(Leaderboards, math.random(1, 10000000), math.random(1, 1500));
 	end;
 end

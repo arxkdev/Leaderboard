@@ -14,6 +14,7 @@ local FoundInTable = Util.FoundInTable;
 local GetDaysInMonth = Util.GetDaysInMonth;
 local FNV_1A_32 = Util.FNV_1A_32;
 local FALLBACK_EXPIRY_TIMES = Util.FALLBACK_EXPIRY_TIMES;
+local SHARD_CLEANUP_SETTINGS = Util.SHARD_CLEANUP_SETTINGS;
 local OFFLINE_ENVIRONMENT = game.GameId == 0;
 
 --[=[
@@ -47,6 +48,8 @@ export type MemoryShardArguments = {
 	_shards: {MemoryStoreSortedMap},
 	_shardCount: number,
 	_logger: Logger.Logger?,
+	_cleanupThread: thread?,
+	_maxEntriesPerShard: number,
 }
 
 --[=[
@@ -74,6 +77,10 @@ export type TopData = {
 	@field _getAsync (self: MemoryShard, key: string) -> any
 	@field _setAsync (self: MemoryShard, key: string, value: any, expiry: number, sortKey: number) -> boolean
 	@field _updateAsync (self: MemoryShard, key: string, transformer: (any) -> (any), expiry: number) -> boolean
+	@field _cleanupShards (self: MemoryShard, maxEntriesPerShard: number?) -> Promise.TypedPromise<boolean>
+	@field _removeKeyFromShard (self: MemoryShard, shardIndex: number, key: string) -> Promise.TypedPromise<boolean>
+	@field _getShardSize (self: MemoryShard, shardIndex: number) -> Promise.TypedPromise<number>
+	@field CleanupNow (self: MemoryShard, maxEntriesPerShard: number?) -> Promise.TypedPromise<boolean>
 	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: MemoryShard) -> ()
@@ -86,6 +93,10 @@ type Object = {
 	_getAsync: (self: MemoryShard, userId: number) -> Promise.TypedPromise<any>,
 	_setAsync: (self: MemoryShard, userId: number, value: any, expiry: number, sortKey: number) -> Promise.TypedPromise<boolean>,
 	_updateAsync: (self: MemoryShard, userId: number, transformer: (any) -> (any), expiry: number) -> Promise.TypedPromise<boolean>,
+	_cleanupShards: (self: MemoryShard, maxEntriesPerShard: number?) -> Promise.TypedPromise<boolean>,
+	_removeKeyFromShard: (self: MemoryShard, shardIndex: number, key: string) -> Promise.TypedPromise<boolean>,
+	_getShardSize: (self: MemoryShard, shardIndex: number) -> Promise.TypedPromise<number>,
+	CleanupNow: (self: MemoryShard, maxEntriesPerShard: number?) -> Promise.TypedPromise<boolean>,
 	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: MemoryShard) -> (),
@@ -127,6 +138,8 @@ function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, sha
 	self._fallbackExpiry = (rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self._type];
 	self._boardKey = boardKey;
 	self._logger = Logger.new("MemoryShard", debugMode or false);
+	self._maxEntriesPerShard = SHARD_CLEANUP_SETTINGS.MAX_ENTRIES_PER_SHARD;
+	self._cleanupThread = nil;
 
 	-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
 	for Index = 1, shardCount do
@@ -145,6 +158,21 @@ function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, sha
 		end;
 
 		self._shards[Index] = Success and Response or nil;
+	end;
+
+	-- Start periodic cleanup thread
+	if (not OFFLINE_ENVIRONMENT) then
+		self._cleanupThread = task.spawn(function()
+			while (true) do
+				task.wait(SHARD_CLEANUP_SETTINGS.CLEANUP_INTERVAL);
+
+				self:_cleanupShards(self._maxEntriesPerShard):catch(function(err)
+					self._logger:Log(3, `Cleanup cycle failed: {err}`);
+				end);
+			end;
+		end);
+
+		self._logger:Log(1, `Started cleanup thread for {boardKey} with max {self._maxEntriesPerShard} entries per shard`);
 	end;
 
 	return self;
@@ -322,7 +350,7 @@ function MemoryShard:Get(topAmount, sortDirection)
 	local CombinedResults = {};
 	local ResultsToFetch = GetResultCount(self._shardCount);
 
-	self._logger:Log(1, `[{self._boardKey}]: Fetching {ResultsToFetch} records in {self._type}`);
+	self._logger:Log(1, `[{self._boardKey}]: Fetching {ResultsToFetch} records per shard (max {topAmount} total) in {self._type}`);
 
 	local function ProcessRecord(record: {key: string, value: number})
 		local IndexFound, Found = FoundInTable(CombinedResults, tonumber(record.key));
@@ -385,11 +413,13 @@ function MemoryShard:Get(topAmount, sortDirection)
 
 		-- Trim the results if necessary
 		if (#CombinedResults > topAmount) then
+			self._logger:Log(1, `[{self._boardKey}]: Trimming results from {#CombinedResults} to {topAmount}`);
 			for i = #CombinedResults, topAmount + 1, -1 do
 				table.remove(CombinedResults, i);
 			end;
 		end;
 
+		self._logger:Log(1, `[{self._boardKey}]: Returning {#CombinedResults} records`);
 		return CombinedResults;
 	end):catch(function(err: string)
 		warn(`An error occurred while processing shards: {err}`);
@@ -448,12 +478,160 @@ function MemoryShard:Set(userId, value)
 end
 
 --[=[
+	@param maxEntriesPerShard number?
+	@return Promise.TypedPromise<boolean>
+	@yields
+
+	Manually triggers cleanup of excess entries from all shards.
+	Useful for immediate cleanup when needed.
+]=]
+function MemoryShard:CleanupNow(maxEntriesPerShard: number?)
+	return self:_cleanupShards(maxEntriesPerShard or self._maxEntriesPerShard);
+end
+
+--[=[
+	@param shardIndex number
+	@return number
+	@yields
+
+	Gets the size of a specific shard.
+]=]
+function MemoryShard:_getShardSize(shardIndex: number)
+	local Shard = self._shards[shardIndex];
+	if (not Shard) then
+		return 0;
+	end;
+
+	local Success, Result = pcall(function()
+		return Shard:GetSizeAsync();
+	end);
+
+	if (not Success) then
+		return 0;
+	end;
+
+	return Result;
+end
+
+--[=[
+	@param shardIndex number
+	@param key string
+	@return Promise.TypedPromise<boolean>
+	@yields
+
+	Removes a specific shard.
+]=]
+function MemoryShard:_removeKeyFromShard(shardIndex: number, key: string)
+	return Promise.new(function(resolve, reject)
+		local Success, Result = pcall(function()
+			local Shard = self._shards[shardIndex];
+			if (not Shard) then
+				return reject("Shard not found");
+			end;
+
+			return Shard:RemoveAsync(key);
+		end);
+
+		if (not Success) then
+			return reject(Result);
+		end;
+
+		return resolve(Result);
+	end):catch(warn);
+end
+
+--[=[
+	@param maxEntriesPerShard number?
+	@private
+	@return Promise.TypedPromise<boolean>
+
+	Cleans up excess entries from all shards to prevent storage overflow.
+	Removes the lowest-scoring entries when a shard exceeds the specified limit.
+]=]
+function MemoryShard:_cleanupShards(maxEntriesPerShard: number?)
+	maxEntriesPerShard = maxEntriesPerShard or 1000; -- Default limit per shard
+
+	local CleanupPromises = {};
+
+	for shardIndex, shard in self._shards do
+		if (not shard) then continue; end;
+
+		local CleanupPromise = Promise.new(function(resolve, reject)
+			local Success, Result = pcall(function()
+				local TotalEntries = self:_getShardSize(shardIndex);
+
+				-- Only cleanup if we significantly exceed the limit
+				local BaseCleanupThreshold = 50;
+				if (TotalEntries > maxEntriesPerShard and TotalEntries > BaseCleanupThreshold) then
+					local ExcessCount = TotalEntries - maxEntriesPerShard;
+					self._logger:Log(1, `[{self._boardKey}]: Shard {shardIndex} has {TotalEntries} entries, removing {ExcessCount} lowest entries`);
+
+					-- Remove entries in batches (GetRangeAsync max is 200)
+					local RemovedCount = 0;
+					local BatchSize = math.min(200, ExcessCount);
+
+					while (RemovedCount < ExcessCount) do
+						local CurrentBatchSize = math.min(BatchSize, ExcessCount - RemovedCount);
+
+						-- Get the lowest-scoring entries (ascending order)
+						local Success, LowEntries = pcall(function()
+							return shard:GetRangeAsync(Enum.SortDirection.Ascending, CurrentBatchSize);
+						end);
+						if (not Success) then
+							return reject(LowEntries);
+						end;
+
+						for _, entry in LowEntries do
+							self:_removeKeyFromShard(shardIndex, entry.key);
+							RemovedCount += 1;
+						end;
+
+						if (#LowEntries == 0) then
+							break;
+						end;
+					end;
+
+					self._logger:Log(1, `[{self._boardKey}]: Cleaned up shard {shardIndex}, removed {RemovedCount} entries`);
+				else
+					self._logger:Log(1, `[{self._boardKey}]: Shard {shardIndex} has {TotalEntries} entries (within limit of {maxEntriesPerShard})`);
+				end;
+
+				return true;
+			end);
+
+			if (not Success) then
+				self._logger:Log(3, `[{self._boardKey}]: Failed to cleanup shard {shardIndex}: {Result}`);
+				return reject(Result);
+			end;
+
+			return resolve(Result);
+		end);
+
+		table.insert(CleanupPromises, CleanupPromise);
+	end;
+
+	return Promise.all(CleanupPromises):andThen(function()
+		self._logger:Log(1, `[{self._boardKey}]: Completed cleanup for all shards`);
+		return true;
+	end):catch(function(err)
+		self._logger:Log(3, `[{self._boardKey}]: Cleanup failed: {err}`);
+		return false;
+	end);
+end
+
+--[=[
 	@return ()
 	@yields
 
 	Destroys the MemoryShard
 ]=]
 function MemoryShard:Destroy()
+	-- Cancel cleanup thread
+	if (self._cleanupThread and typeof(self._cleanupThread) == "thread") then
+		task.cancel(self._cleanupThread);
+		self._logger:Log(1, `Cancelled cleanup thread for {self._boardKey}`);
+	end;
+
 	self._logger:Destroy();
 	setmetatable(self, nil);
 end

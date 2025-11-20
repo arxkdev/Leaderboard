@@ -130,7 +130,7 @@ local function GetCurrentId(leaderboardType: string)
 	return leaderboardType == "Hourly" and CurrentHour or leaderboardType == "Daily" and CurrentDay or leaderboardType == "Weekly" and CurrentWeek or leaderboardType == "Monthly" and CurrentMonth or leaderboardType == "Yearly" and CurrentYear or "AllTime" and "AllTime";
 end
 
-local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?): (string, (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?)
+local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?): (string, (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?)
 	-- print(rollingExpiry);
 	-- if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
 	-- 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{GetCurrentId(leaderboardType)}-{boardKey}`);
@@ -140,7 +140,7 @@ local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType
 	-- Not a viable solution anymore, limits are too poor
 	if (leaderboardType ~= "AllTime" or rollingExpiry) then
 		local ShardCount = rollingExpiry and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
-		return "MemoryStore", MemoryShard.new(leaderboardType, boardKey, ShardCount, rollingExpiry);
+		return "MemoryStore", MemoryShard.new(leaderboardType, boardKey, ShardCount, rollingExpiry, debugMode);
 	end;
 
 	-- If we are in an offline enviornment
@@ -172,7 +172,7 @@ function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingEx
 	local self = setmetatable({} :: BoardArguments, Board);
 
 	self._boardKey = boardKey;
-	self._storeType, self._store = ConstructStore(boardKey, leaderboardType, rollingExpiry);
+	self._storeType, self._store = ConstructStore(boardKey, leaderboardType, rollingExpiry, debugMode);
 	self._threads = {};
 	self._logger = Logger.new(`Board-{boardKey}`, debugMode or false);
 
@@ -184,7 +184,7 @@ function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingEx
 				local NewId = GetCurrentId(leaderboardType);
 				if (NewId ~= CurrentId) then
 					CurrentId = NewId;
-					self._storeType, self._store = ConstructStore(boardKey, leaderboardType);
+					self._storeType, self._store = ConstructStore(boardKey, leaderboardType, nil, debugMode);
 				end;
 				task.wait(5);
 			end;

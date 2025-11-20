@@ -20,6 +20,13 @@ local SHARD_COUNTS = { -- Feel free to change these based on how many MAU your g
 	["Monthly"] = 4,
 }
 
+-- CAUTION: ONLY modify if you know what you are doing
+local SHARD_CLEANUP_SETTINGS = {
+	MAX_ENTRIES_PER_SHARD = 300, -- Maximum entries per shard before cleanup
+	CLEANUP_INTERVAL = 60 * 4, -- Cleanup interval (normally we would want to do this around every 4 minutes)
+	CLEANUP_BATCH_SIZE = 200, -- Remove this many excess entries at once (max GetRangeAsync limit)
+}
+
 local function GetDaysInMonth(): number
 	local CurrentDate = DateTime.now():ToUniversalTime();
 	local Month, Year = CurrentDate.Month, CurrentDate.Year;
@@ -99,6 +106,7 @@ Util.FALLBACK_EXPIRY_TIMES = {
 Util.MAX_OVERALL_LEADERBOARDS = MAX_OVERALL_LEADERBOARDS;
 Util.MAX_BOARDS = MAX_BOARDS;
 Util.SHARD_COUNTS = SHARD_COUNTS;
+Util.SHARD_CLEANUP_SETTINGS = SHARD_CLEANUP_SETTINGS;
 
 return Util :: {
 	SmartAssert: (boolean, string) -> ();
@@ -116,4 +124,5 @@ return Util :: {
 	MAX_OVERALL_LEADERBOARDS: number;
 	MAX_BOARDS: number;
 	SHARD_COUNTS: {[string]: number};
+	SHARD_CLEANUP_SETTINGS: {[string]: number};
 }
