@@ -1,17 +1,23 @@
+local byte   = string.byte;
+local band   = bit32.band;
+local bxor   = bit32.bxor;
+local lshift = bit32.lshift;
+
+local BASIS = 0x811c9dc5;
+
 return function (s: string): number
-    local h = 0x811C9DC5 -- offset basis
-    local FNV_PRIME = 0x01000193
+    local h = BASIS;
+    local len = #s;
 
-    for i = 1, #s do
-        h = bit32.bxor(h, string.byte(s, i))
-        -- multiply by 0x01000193, mod 2^32
-        h = bit32.band(h * FNV_PRIME, 0xFFFFFFFF)
-    end
+    for i = 1, len do
+        h = bxor(h, byte(s, i));
 
-    -- force to unsigned range
-    if h < 0 then
-        h = h + 0x100000000
-    end
+        -- 32-bit unsigned multiply by 0x01000193
+        local a = lshift(h, 24);
+        local b = lshift(h, 8);
+        local c = h * 0x93;
+        h = band(a + b + c, 0xFFFFFFFF);
+    end;
 
-    return h
+    return h;
 end
