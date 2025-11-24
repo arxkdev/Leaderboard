@@ -6,6 +6,7 @@ local Packages = Leaderboard:FindFirstChild("Packages") or Leaderboard.Parent; -
 local Promise = require(Packages.Promise);
 local Util = require(Leaderboard.Util);
 local Logger = require(Leaderboard.Logger);
+local Trove = require(Packages.Trove);
 
 -- Variables
 local Compression = Util.Compression;
@@ -48,8 +49,8 @@ export type MemoryShardArguments = {
 	_shards: {MemoryStoreSortedMap},
 	_shardCount: number,
 	_logger: Logger.Logger?,
-	_cleanupThread: thread?,
 	_maxEntriesPerShard: number,
+	_trove: typeof(Trove.new),
 }
 
 --[=[
@@ -139,7 +140,7 @@ function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, sha
 	self._boardKey = boardKey;
 	self._logger = Logger.new("MemoryShard", debugMode or false);
 	self._maxEntriesPerShard = SHARD_CLEANUP_SETTINGS.MAX_ENTRIES_PER_SHARD;
-	self._cleanupThread = nil;
+	self._trove = Trove.new();
 
 	-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
 	for Index = 1, shardCount do
@@ -162,7 +163,7 @@ function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, sha
 
 	-- Start periodic cleanup thread
 	if (not OFFLINE_ENVIRONMENT) then
-		self._cleanupThread = task.spawn(function()
+		self._trove:Add(task.spawn(function()
 			while (true) do
 				task.wait(SHARD_CLEANUP_SETTINGS.CLEANUP_INTERVAL);
 
@@ -170,7 +171,7 @@ function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, sha
 					self._logger:Log(3, `Cleanup cycle failed: {err}`);
 				end);
 			end;
-		end);
+		end));
 
 		self._logger:Log(1, `Started cleanup thread for {boardKey} with max {self._maxEntriesPerShard} entries per shard`);
 	end;
@@ -627,10 +628,7 @@ end
 ]=]
 function MemoryShard:Destroy()
 	-- Cancel cleanup thread
-	if (self._cleanupThread and typeof(self._cleanupThread) == "thread") then
-		task.cancel(self._cleanupThread);
-		self._logger:Log(1, `Cancelled cleanup thread for {self._boardKey}`);
-	end;
+	self._trove:Destroy();
 
 	self._logger:Destroy();
 	setmetatable(self, nil);

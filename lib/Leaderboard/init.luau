@@ -10,13 +10,13 @@ local Signal = require(Packages.Signal);
 local Promise = require(Packages.Promise);
 local Board = require(script.Board);
 local Logger = require(script.Logger);
+local Trove = require(Packages.Trove);
 
 -- Variables
 local SmartAssert = Util.SmartAssert;
 local KeysInDictionary = Util.KeysInDictionary;
 local GenerateGUID = Util.GenerateGUID;
 local Spawn = task.spawn;
-local Cancel = task.cancel;
 
 -- Constants
 local MEMORY_STORE_SERVICE_MAX_EXPIRY = Util.MEMORY_STORE_SERVICE_MAX_EXPIRY;
@@ -87,8 +87,6 @@ export type LeaderboardTypeArgument = {
 	@field _lastSaved number
 	@field _isFetching boolean
 	@field _lastFetch number
-	@field _threads {thread}
-	@field _connections {RBXScriptConnection}
 	@field _logger Logger.Logger?
 ]=]
 export type LeaderboardArguments = {
@@ -102,8 +100,7 @@ export type LeaderboardArguments = {
 	_lastSaved: number,
 	_isFetching: boolean,
 	_lastFetch: number,
-	_threads: {thread},
-	_connections: {RBXScriptConnection},
+	_trove: typeof(Trove.new),
 	_logger: Logger.Logger?,
 }
 
@@ -256,21 +253,31 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 	self._isSaving = false;
 	self._lastFetch = 0;
 	self._isFetching = false;
-	self._threads = {};
-	self._connections = {};
+	self._trove = Trove.new();
 	self._logger = Logger.new("Leaderboard", debugMode or false);
+
+	-- Add signals and logger to Trove for cleanup
+	self._trove:Add(self.Updated);
+	self._trove:Add(self.BoardUpdated);
+	self._trove:Add(self._logger);
 
 	-- Add to leaderboards
 	Leaderboards[self._serviceKey] = self;
 
 	-- Initialize boards
 	for boardType, boardKey in leaderboardTypes do
-		self._boards[boardType] = Board.new(typeof(boardKey) == "table" and boardKey[2] or boardKey, boardType, typeof(boardKey) == "table" and boardKey[1] or nil, debugMode);
+		local newBoard  = Board.new(typeof(boardKey) == "table" and boardKey[2] or boardKey, boardType, typeof(boardKey) == "table" and boardKey[1] or nil, debugMode);
+		self._boards[boardType] = newBoard;
+
+		-- Add to tove to cleanup the board when the leaderboard is destroyed
+		self._trove:Add(function()
+			newBoard:Destroy();
+		end);
 	end;
 
 	-- Start automation
 	if (automationSettings and automationSettings.Automation) then
-		table.insert(self._threads, Spawn(function()
+		local automationThread = Spawn(function()
 			local CalledTimes = 0;
 
 			while (true) do
@@ -292,16 +299,20 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 				CalledTimes += 1;
 				task.wait(automationSettings.Interval);
 			end;
-		end));
+		end);
+		-- Add thread to Trove for cleanup
+		self._trove:Add(automationThread);
 	end;
 
 	-- Player removing
-	table.insert(self._connections, Players.PlayerRemoving:Connect(function(player)
+	local playerRemovingConnection = Players.PlayerRemoving:Connect(function(player)
 		-- Remove the player from the value queue
 		if (self._valueQueue[player.UserId]) then
 			self._valueQueue[player.UserId] = nil;
 		end;
-	end));
+	end);
+	-- Add connection to Trove for cleanup
+	self._trove:Add(playerRemovingConnection);
 
 	return self;
 end
@@ -540,25 +551,8 @@ function Leaderboard:Destroy()
 		end;
 	end;
 
-	-- Destroy all the boards
-	for _, GlobalBoard in self._boards do
-		GlobalBoard:Destroy();
-	end;
-
-	-- Cancel all the threads
-	for _, Thread in self._threads do
-		if (typeof(Thread) == "thread") then
-			Cancel(Thread);
-		end;
-	end;
-
-	-- Disconnect all the connections
-	for _, Connection in self._connections do
-		Connection:Disconnect();
-	end;
-
-	-- Logger destroy
-	self._logger:Destroy();
+	-- Destroy Trove (this will cleanup boards, threads, connections, signals, and logger)
+	self._trove:Destroy();
 
 	-- Remove from leaderboards
 	if (Leaderboards[self._serviceKey]) then
