@@ -2,7 +2,7 @@
 local MemoryStoreService = game:GetService("MemoryStoreService");
 
 local Leaderboard = script.Parent.Parent;
-local Packages = Leaderboard.Packages;
+local Packages = Leaderboard:FindFirstChild("Packages") or Leaderboard.Parent; -- Development Wally places packages in Leaderboard.Parent; Production Wally places packages in Leaderboard/Packages
 local Promise = require(Packages.Promise);
 local Util = require(Leaderboard.Util);
 local Logger = require(Leaderboard.Logger);
