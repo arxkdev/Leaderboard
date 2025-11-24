@@ -13,6 +13,7 @@ local Trove = require(Packages.Trove);
 local Util = require(script.Parent.Util);
 local Logger = require(script.Parent.Logger);
 local UserIdsCache = require(script.Parent.UserIdCache);
+local Backoff = require(Packages.Backoff);
 
 -- Variables
 local Compression = Util.Compression;

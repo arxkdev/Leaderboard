@@ -7,6 +7,7 @@ local Promise = require(Packages.Promise);
 local Util = require(Leaderboard.Util);
 local Logger = require(Leaderboard.Logger);
 local Trove = require(Packages.Trove);
+local Backoff = require(Packages.Backoff);
 
 -- Variables
 local Compression = Util.Compression;
