@@ -4,7 +4,7 @@
 local Players = game:GetService("Players");
 
 -- Requirements
-local Packages = script.Packages;
+local Packages = script.Parent;
 local Util = require(script.Util);
 local Signal = require(Packages.Signal);
 local Promise = require(Packages.Promise);
