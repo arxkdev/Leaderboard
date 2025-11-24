@@ -4,7 +4,7 @@
 local Players = game:GetService("Players");
 
 -- Requirements
-local Packages = script.Parent;
+local Packages = script:FindFirstChild("Packages") or script.Parent; -- Development Wally places packages in script.Packages; Production Wally places packages in script.Parent.Packages
 local Util = require(script.Util);
 local Signal = require(Packages.Signal);
 local Promise = require(Packages.Promise);
