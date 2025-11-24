@@ -224,7 +224,7 @@ function Board:Get(amount, sortDirection)
 				end));
 			end;
 			return Promise.all(Promises):awaitValue() :: { TopData };
-		else
+		else -- TODO: This will be where DataStoreShards are used. Make sure that's explicitly stated.
 			-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
 			-- if (RequestBudget < 1) then
 			-- 	warn(`Skipping getting top data for {self._boardKey} due to insufficient budget`);
