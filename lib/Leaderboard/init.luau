@@ -160,17 +160,19 @@ type Board = Board.Board;
 	@interface BoardConfig
 	@field Name string
 	@field Automation boolean?
-	@field Interval number?
 	@field MaxRecords number?
 	@field DisplayCount number?
+	@field SaveInterval number?
+	@field RefreshInterval number?
 	@field Shards number?
 ]=]
 export type BoardConfig = {
 	Name: string,
 	Automation: boolean?,
-	Interval: number?,
 	MaxRecords: number?,
 	DisplayCount: number?,
+	SaveInterval: number?,
+	RefreshInterval: number?,
 	Shards: number?,
 }
 
@@ -258,14 +260,17 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 				if (boardConfig.Automation ~= nil) then
 					SmartAssert(type(boardConfig.Automation) == "boolean", "BoardConfig.Automation must be a boolean");
 				end;
-				if (boardConfig.Interval ~= nil) then
-					SmartAssert(type(boardConfig.Interval) == "number", "BoardConfig.Interval must be a number");
-				end;
 				if (boardConfig.MaxRecords ~= nil) then
 					SmartAssert(type(boardConfig.MaxRecords) == "number", "BoardConfig.MaxRecords must be a number");
 				end;
 				if (boardConfig.DisplayCount ~= nil) then
 					SmartAssert(type(boardConfig.DisplayCount) == "number", "BoardConfig.DisplayCount must be a number");
+				end;
+				if (boardConfig.SaveInterval ~= nil) then
+					SmartAssert(type(boardConfig.SaveInterval) == "number", "BoardConfig.SaveInterval must be a number");
+				end;
+				if (boardConfig.RefreshInterval ~= nil) then
+					SmartAssert(type(boardConfig.RefreshInterval) == "number", "BoardConfig.RefreshInterval must be a number");
 				end;
 				if (boardConfig.Shards ~= nil) then
 					SmartAssert(type(boardConfig.Shards) == "number", "BoardConfig.Shards must be a number");
@@ -333,19 +338,27 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 		if (boardConfig and boardConfig.Automation) then
 			-- Capture boardType in a local variable to avoid closure issues
 			local capturedBoardType = boardType;
-			local interval = boardConfig.Interval or 300;
+			local saveInterval = boardConfig.SaveInterval or 30;
+			local refreshInterval = boardConfig.RefreshInterval or 600;
 			local displayCount = boardConfig.DisplayCount or 50;
 			
 			local automationThread = Spawn(function()
-				local CalledTimes = 0;
+				local lastSaveTime = 0;
+				local lastRefreshTime = 0;
 
 				while (true) do
-					print("run")
-					-- Update the value from the queue
-					self:SaveValues();
+					local currentTime = tick();
+					
+					-- Save values if SaveInterval has passed
+					if (currentTime - lastSaveTime >= saveInterval) then
+						print("run")
+						-- Update the value from the queue
+						self:SaveValues();
+						lastSaveTime = currentTime;
+					end;
 
-					-- We work in alternating turns, so one loop we'll update the value queue, the next we'll update the actual store value(s)
-					if (CalledTimes % 2 == 0 or CalledTimes == 0) then
+					-- Refresh records if RefreshInterval has passed
+					if (currentTime - lastRefreshTime >= refreshInterval) then
 						print("get records")
 						-- Get the top and update the signal for this specific board type
 						-- Create a dictionary with capturedBoardType as key (not an array)
@@ -356,10 +369,14 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 								self.BoardUpdated:Fire(board);
 							end;
 						end;
+						lastRefreshTime = currentTime;
 					end;
 
-					CalledTimes += 1;
-					task.wait(interval);
+					-- Wait for the shorter of the two intervals to check again
+					local timeUntilNextSave = math.max(0, saveInterval - (currentTime - lastSaveTime));
+					local timeUntilNextRefresh = math.max(0, refreshInterval - (currentTime - lastRefreshTime));
+					local waitTime = math.max(0.1, math.min(timeUntilNextSave, timeUntilNextRefresh));
+					task.wait(waitTime);
 				end;
 			end);
 			-- Add thread to Trove for cleanup

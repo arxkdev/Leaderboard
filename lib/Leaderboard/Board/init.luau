@@ -135,9 +135,10 @@ end
 type BoardConfig = {
 	Name: string,
 	Automation: boolean?,
-	Interval: number?,
 	MaxRecords: number?,
 	DisplayCount: number?,
+	SaveInterval: number?,
+	RefreshInterval: number?,
 	Shards: number?,
 }
 

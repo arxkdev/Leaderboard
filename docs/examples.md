@@ -19,9 +19,10 @@ local LeaderboardTypes = { -- You must provide keys for the individual boards
 local MoneyLeaderboard = Leaderboard.new(LeaderboardTypes, {
     -- Settings
     Automation = true,
-    Interval = 5,
     MaxRecords = 100, -- Maximum number of records to store
     DisplayCount = 50, -- Number of records to display (defaults to 50)
+    SaveInterval = 30, -- How often to save values (defaults to 30 seconds)
+    RefreshInterval = 600, -- How often to refresh records (defaults to 600 seconds / 10 minutes)
 })
 
 local function FunctionToIncrementMoney(userId: number, amount: number)
@@ -97,9 +98,10 @@ local Leaderboards = {
 };
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
-	Interval = 15,
 	MaxRecords = 100, -- Maximum number of records to store
 	DisplayCount = 50, -- Number of records to display (defaults to 50)
+	SaveInterval = 30, -- How often to save values (defaults to 30 seconds)
+	RefreshInterval = 600, -- How often to refresh records (defaults to 600 seconds / 10 minutes)
 });
 
 local function IncrementMoneyTest()

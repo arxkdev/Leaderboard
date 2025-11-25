@@ -15,24 +15,27 @@ local Leaderboards = {
 	["Weekly"] = {
 		Name = `Money-Weekly-{Key}`,
 		Automation = true,
-		Interval = 30,
 		MaxRecords = 1000,
 		DisplayCount = 50,
+		SaveInterval = 30,
+		RefreshInterval = 600,
 	},
 	--[[
 	["Monthly"] = {
 		Name = `Money-Monthly-{Key}`,
 		Automation = true,
-		Interval = 30,
 		MaxRecords = 500,
 		DisplayCount = 50,
+		SaveInterval = 30,
+		RefreshInterval = 600,
 	},]]
 	["AllTime"] = {
 		Name = `Money-AllTime-{Key}`,
 		Automation = true,
-		Interval = 30,
 		MaxRecords = 500,
 		DisplayCount = 50,
+		SaveInterval = 30,
+		RefreshInterval = 600,
 	},
 };
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, true);

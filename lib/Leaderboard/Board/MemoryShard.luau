@@ -120,6 +120,8 @@ local MemoryShard: Object = {} :: Object;
 MemoryShard.__index = MemoryShard;
 
 --[=[
+	@within MemoryShard
+	@private
 	@param maxRecords number
 	@return number
 	
