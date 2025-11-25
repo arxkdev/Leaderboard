@@ -508,6 +508,7 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 
 	local Queue = self._valueQueue[userId];
 	for boardType in boardTypes do
+		print("Incrementing value for board type", boardType);
 		-- Update the value queue
 		if (not Queue[boardType]) then
 			Queue[boardType] = {
@@ -515,8 +516,10 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 				Board = self._boards[boardType],
 				OperationType = "Increment",
 			};
+			print("Added value to queue for board type", boardType);
 		else
 			Queue[boardType].Amount += amount;
+			print("Incremented value for board type", boardType);
 		end;
 	end;
 end

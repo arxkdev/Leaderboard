@@ -88,9 +88,6 @@ MoneyLeaderboard.Updated:Connect(function(boards)
 		print(`[Money] Updating board {board.Type} - with {#board.Data} entries!`);
 		UpdateBoard(board.Data, workspace.Leaderboards["Money"][board.Type]);
 	end;
-
-	-- Increment
-	IncrementMoneyTest();
 end);
 -- MoneyLeaderboard.BoardUpdated:Connect(function(board)
 -- 	print(board.Type, board.Data);
@@ -99,7 +96,7 @@ end);
 
 task.delay(3, function()
 	print("Setting money test");
-	MoneyLeaderboard:SetValues("All", 6271821, 1000);
+	MoneyLeaderboard:IncrementValues("All", 6271821, 1000);
 	task.wait(1);
 	print(MoneyLeaderboard:GetRecords("All", 100):expect());
 end)
