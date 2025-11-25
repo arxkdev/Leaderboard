@@ -9,9 +9,11 @@ local DataStoreService = game:GetService("DataStoreService");
 local Packages = script.Parent:FindFirstChild("Packages") or script.Parent.Parent; -- Development Wally places packages in script.Parent/Packages; Production Wally places packages in script.Parent.Parent
 local MemoryShard = require(script.MemoryShard);
 local Promise = require(Packages.Promise);
+local Trove = require(Packages.Trove);
 local Util = require(script.Parent.Util);
 local Logger = require(script.Parent.Logger);
 local UserIdsCache = require(script.Parent.UserIdCache);
+local Backoff = require(Packages.Backoff);
 
 -- Variables
 local Compression = Util.Compression;
@@ -42,14 +44,12 @@ export type Board = typeof(setmetatable({} :: BoardArguments, {} :: Object));
 	@field _boardKey string
 	@field _storeUsing string
 	@field _store (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?
-	@field _threads {thread}
 ]=]
 export type BoardArguments = {
 	_type: LeaderboardType,
 	_boardKey: string,
 	_storeUsing: string,
 	_store: (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?,
-	_threads: {thread},
 	_logger: Logger.Logger?,
 }
 
@@ -83,6 +83,7 @@ type MemoryShard = MemoryShard.MemoryShard;
 ]=]
 type Object = {
 	__index: Object,
+	Trove: typeof(Trove.new),
 	Update: (self: Board, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: Board, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: Board) -> (),
@@ -173,12 +174,12 @@ function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingEx
 
 	self._boardKey = boardKey;
 	self._storeType, self._store = ConstructStore(boardKey, leaderboardType, rollingExpiry, debugMode);
-	self._threads = {};
 	self._logger = Logger.new(`Board-{boardKey}`, debugMode or false);
+	self._trove = Trove.new();
 
 	-- New implementation: we just check if the current id is different from the previous one
 	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
-		table.insert(self._threads, Spawn(function()
+		self._trove:Add(function()
 			local CurrentId = GetCurrentId(leaderboardType);
 			while (true) do
 				local NewId = GetCurrentId(leaderboardType);
@@ -188,7 +189,7 @@ function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingEx
 				end;
 				task.wait(5);
 			end;
-		end));
+		end);
 	end;
 
 	return self;
@@ -224,7 +225,7 @@ function Board:Get(amount, sortDirection)
 				end));
 			end;
 			return Promise.all(Promises):awaitValue() :: { TopData };
-		else
+		else -- TODO: This will be where DataStoreShards are used. Make sure that's explicitly stated.
 			-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
 			-- if (RequestBudget < 1) then
 			-- 	warn(`Skipping getting top data for {self._boardKey} due to insufficient budget`);
@@ -317,12 +318,8 @@ end
 	Destroys the board.
 ]=]
 function Board:Destroy()
-	-- Destroy the threads
-	for _, Thread in self._threads do
-		if (typeof(Thread) == "thread") then
-			Cancel(Thread);
-		end;
-	end;
+	-- Destroy the trove
+	self._trove:Destroy();
 
 	-- Destroy the store
 	if (self._storeType == "MemoryStore") then
