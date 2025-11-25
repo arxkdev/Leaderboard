@@ -136,15 +136,8 @@ type BoardConfig = {
 	Name: string,
 	Automation: boolean?,
 	Interval: number?,
-	RecordCount: number?,
-	Shards: number?,
-}
-
-type BoardConfig = {
-	Name: string,
-	Automation: boolean?,
-	Interval: number?,
-	RecordCount: number?,
+	MaxRecords: number?,
+	DisplayCount: number?,
 	Shards: number?,
 }
 
@@ -157,7 +150,7 @@ local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType
 	-- If we are using a MemoryStore, we can just update the data
 	-- Not a viable solution anymore, limits are too poor
 	if (leaderboardType ~= "AllTime" or rollingExpiry) then
-		local recordCount = boardConfig and boardConfig.RecordCount or Manifest.DEFAULT_RECORD_COUNT;
+		local maxRecords = boardConfig and boardConfig.MaxRecords or Manifest.DEFAULT_RECORD_COUNT;
 		local shardCount: number;
 		
 		if (boardConfig and boardConfig.Shards) then
@@ -166,15 +159,15 @@ local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType
 		elseif (rollingExpiry) then
 			-- Use rolling expiry calculation
 			shardCount = ShardCalculation(rollingExpiry);
-		elseif (boardConfig and boardConfig.RecordCount) then
-			-- Calculate shard count from record count
-			shardCount = Manifest.CalculateShardCount(recordCount);
+		elseif (boardConfig and boardConfig.MaxRecords) then
+			-- Calculate shard count from max records
+			shardCount = Manifest.CalculateShardCount(maxRecords);
 		else
 			-- Fall back to default shard counts
 			shardCount = SHARD_COUNTS[leaderboardType] or 1;
 		end;
 		
-		return "MemoryStore", MemoryShard.new(leaderboardType, boardKey, shardCount, recordCount, rollingExpiry, debugMode);
+		return "MemoryStore", MemoryShard.new(leaderboardType, boardKey, shardCount, maxRecords, rollingExpiry, debugMode);
 	end;
 
 	-- If we are in an offline enviornment

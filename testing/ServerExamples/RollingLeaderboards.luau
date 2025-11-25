@@ -18,7 +18,8 @@ local Leaderboards = {
 --     Name = `15MinutesRolling-{Key}`,
 --     Automation = true,
 --     Interval = 120,
---     RecordCount = 100,
+--     MaxRecords = 100,
+--     DisplayCount = 50,
 -- },
 -- But rolling expiry would need to be handled separately
 local GoldLeaderboard = Leaderboard.new(Leaderboards, true);

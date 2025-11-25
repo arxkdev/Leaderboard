@@ -161,14 +161,16 @@ type Board = Board.Board;
 	@field Name string
 	@field Automation boolean?
 	@field Interval number?
-	@field RecordCount number?
+	@field MaxRecords number?
+	@field DisplayCount number?
 	@field Shards number?
 ]=]
 export type BoardConfig = {
 	Name: string,
 	Automation: boolean?,
 	Interval: number?,
-	RecordCount: number?,
+	MaxRecords: number?,
+	DisplayCount: number?,
 	Shards: number?,
 }
 
@@ -259,8 +261,11 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 				if (boardConfig.Interval ~= nil) then
 					SmartAssert(type(boardConfig.Interval) == "number", "BoardConfig.Interval must be a number");
 				end;
-				if (boardConfig.RecordCount ~= nil) then
-					SmartAssert(type(boardConfig.RecordCount) == "number", "BoardConfig.RecordCount must be a number");
+				if (boardConfig.MaxRecords ~= nil) then
+					SmartAssert(type(boardConfig.MaxRecords) == "number", "BoardConfig.MaxRecords must be a number");
+				end;
+				if (boardConfig.DisplayCount ~= nil) then
+					SmartAssert(type(boardConfig.DisplayCount) == "number", "BoardConfig.DisplayCount must be a number");
 				end;
 				if (boardConfig.Shards ~= nil) then
 					SmartAssert(type(boardConfig.Shards) == "number", "BoardConfig.Shards must be a number");
@@ -329,20 +334,22 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 			-- Capture boardType in a local variable to avoid closure issues
 			local capturedBoardType = boardType;
 			local interval = boardConfig.Interval or 300;
-			local recordCount = boardConfig.RecordCount or 100;
+			local displayCount = boardConfig.DisplayCount or 50;
 			
 			local automationThread = Spawn(function()
 				local CalledTimes = 0;
 
 				while (true) do
+					print("run")
 					-- Update the value from the queue
 					self:SaveValues();
 
 					-- We work in alternating turns, so one loop we'll update the value queue, the next we'll update the actual store value(s)
 					if (CalledTimes % 2 == 0 or CalledTimes == 0) then
+						print("get records")
 						-- Get the top and update the signal for this specific board type
 						-- Create a dictionary with capturedBoardType as key (not an array)
-						local TopData = self:GetRecords({[capturedBoardType] = true}, recordCount):awaitValue() :: {AllTopData};
+						local TopData = self:GetRecords({[capturedBoardType] = true}, displayCount):awaitValue() :: {AllTopData};
 						if (TopData and #TopData > 0) then
 							self.Updated:Fire(TopData);
 							for _, board in TopData do

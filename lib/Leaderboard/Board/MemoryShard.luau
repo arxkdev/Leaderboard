@@ -92,7 +92,7 @@ export type TopData = {
 	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: MemoryShard) -> ()
-	@field new (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, recordCount: number?, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard
+	@field new (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, maxRecords: number?, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard
 ]=]
 type Object = {
 	__index: Object,
@@ -108,7 +108,7 @@ type Object = {
 	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: MemoryShard) -> (),
-	new: (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, recordCount: number?, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard,
+	new: (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, maxRecords: number?, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard,
 }
 
 --[=[
@@ -120,28 +120,28 @@ local MemoryShard: Object = {} :: Object;
 MemoryShard.__index = MemoryShard;
 
 --[=[
-	@param recordCount number
+	@param maxRecords number
 	@return number
 	
-	Calculates the recommended shard count based on record count.
-	Warns if recordCount exceeds 100,000 or if shardCount > 16 is recommended.
+	Calculates the recommended shard count based on max records.
+	Warns if maxRecords exceeds 100,000 or if shardCount > 16 is recommended.
 ]=]
-local function _CalculateShardCount(recordCount: number): number
-	if recordCount <= 100 then
+local function _CalculateShardCount(maxRecords: number): number
+	if maxRecords <= 100 then
 		return 1;
-	elseif recordCount >= 101 and recordCount <= 499 then
+	elseif maxRecords >= 101 and maxRecords <= 499 then
 		return 2;
-	elseif recordCount >= 500 and recordCount <= 5000 then
+	elseif maxRecords >= 500 and maxRecords <= 5000 then
 		return 3;
-	elseif recordCount >= 5001 and recordCount <= 10000 then
+	elseif maxRecords >= 5001 and maxRecords <= 10000 then
 		return 5;
-	elseif recordCount >= 10001 and recordCount <= 30000 then
+	elseif maxRecords >= 10001 and maxRecords <= 30000 then
 		return 15;
-	elseif recordCount >= 30001 and recordCount <= 100000 then
-		warn(`[MemoryShard] RecordCount of {recordCount} may quickly reach MemoryStore limits. Consider using fewer records or rotating to a new epoch.`);
+	elseif maxRecords >= 30001 and maxRecords <= 100000 then
+		warn(`[MemoryShard] MaxRecords of {maxRecords} may quickly reach MemoryStore limits. Consider using fewer records or rotating to a new epoch.`);
 		return 16;
 	else
-		warn(`[MemoryShard] RecordCount of {recordCount} exceeds recommended maximum of 100,000. This may quickly reach MemoryStore limits.`);
+		warn(`[MemoryShard] MaxRecords of {maxRecords} exceeds recommended maximum of 100,000. This may quickly reach MemoryStore limits.`);
 		return 16;
 	end;
 end
@@ -158,14 +158,14 @@ end
 	@param leaderboardType LeaderboardType
 	@param boardKey string
 	@param shardCount number
-	@param recordCount number?
+	@param maxRecords number?
 	@param rollingExpiry number?
 	@param debugMode boolean?
 
 	Creates a new MemoryShard. This is not a viable solution anymore, as the limits to MemoryStoreService are too poor.
 	See: https://devforum.roblox.com/t/introducing-memorystore-sortedmap-sortkey-beta/2673559/23
 ]=]
-function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, shardCount: number, recordCount: number?, rollingExpiry: number?, debugMode: boolean?)
+function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, shardCount: number, maxRecords: number?, rollingExpiry: number?, debugMode: boolean?)
 	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
 	self._shards = {};
 	self._type = leaderboardType;
@@ -176,12 +176,12 @@ function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, sha
 	self._maxEntriesPerShard = SHARD_CLEANUP_SETTINGS.MAX_ENTRIES_PER_SHARD;
 	self._trove = Trove.new();
 
-	-- Set default record count if not provided
-	local maxItems = recordCount or DEFAULT_RECORD_COUNT;
+	-- Set default max records if not provided
+	local maxItems = maxRecords or DEFAULT_RECORD_COUNT;
 
 	-- Warn if shardCount exceeds recommended maximum
 	if (shardCount > 16) then
-		warn(`[MemoryShard] Shard count of {shardCount} exceeds recommended maximum of 16. This may result in more API calls. Recommended range: 0-16 based on RecordCount.`);
+		warn(`[MemoryShard] Shard count of {shardCount} exceeds recommended maximum of 16. This may result in more API calls. Recommended range: 0-16 based on MaxRecords.`);
 	end;
 
 	-- Load or create manifest

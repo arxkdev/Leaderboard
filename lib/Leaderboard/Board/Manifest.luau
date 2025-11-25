@@ -63,28 +63,28 @@ end
 
 --[=[
 	@within Manifest
-	@param recordCount number
+	@param maxRecords number
 	@return number
 	
-	Calculates the recommended shard count based on record count.
-	Warns if recordCount exceeds 100,000 or if shardCount > 16 is recommended.
+	Calculates the recommended shard count based on max records.
+	Warns if maxRecords exceeds 100,000 or if shardCount > 16 is recommended.
 ]=]
-function Manifest.CalculateShardCount(recordCount: number): number
-	if recordCount <= 100 then
+function Manifest.CalculateShardCount(maxRecords: number): number
+	if maxRecords <= 100 then
 		return 1;
-	elseif recordCount >= 101 and recordCount <= 499 then
+	elseif maxRecords >= 101 and maxRecords <= 499 then
 		return 2;
-	elseif recordCount >= 500 and recordCount <= 5000 then
+	elseif maxRecords >= 500 and maxRecords <= 5000 then
 		return 3;
-	elseif recordCount >= 5001 and recordCount <= 10000 then
+	elseif maxRecords >= 5001 and maxRecords <= 10000 then
 		return 5;
-	elseif recordCount >= 10001 and recordCount <= 30000 then
+	elseif maxRecords >= 10001 and maxRecords <= 30000 then
 		return 15;
-	elseif recordCount >= 30001 and recordCount <= 100000 then
-		warn(`[Manifest] RecordCount of {recordCount} may quickly reach MemoryStore limits. Consider using fewer records or rotating to a new epoch.`);
+	elseif maxRecords >= 30001 and maxRecords <= 100000 then
+		warn(`[Manifest] MaxRecords of {maxRecords} may quickly reach MemoryStore limits. Consider using fewer records or rotating to a new epoch.`);
 		return 16;
 	else
-		warn(`[Manifest] RecordCount of {recordCount} exceeds recommended maximum of 100,000. This may quickly reach MemoryStore limits.`);
+		warn(`[Manifest] MaxRecords of {maxRecords} exceeds recommended maximum of 100,000. This may quickly reach MemoryStore limits.`);
 		return 16;
 	end;
 end
