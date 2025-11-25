@@ -7,7 +7,7 @@ local Promise = require(Packages.Promise);
 local Util = require(Leaderboard.Util);
 local Logger = require(Leaderboard.Logger);
 local Trove = require(Packages.Trove);
-local _Backoff = require(Packages.Backoff);
+local Backoff = require(Packages.Backoff);
 local Manifest = require(script.Parent.Manifest);
 
 -- Variables
@@ -466,13 +466,37 @@ function MemoryShard:Get(topAmount, sortDirection)
 
 	-- Go through the shards, extract the data, and combine it
 	local Promises = {};
-	for _, Shard in self._shards do
+	for shardIndex, Shard in self._shards do
 		local ShardPromise = Promise.new(function(resolve, reject)
-			local Success, Result = pcall(ProcessShard(Shard));
-			if (not Success) then
-				return reject(Result);
+			-- Use Backoff to retry GetRangeAsync with exponential backoff
+			local backoffSuccess, backoffResult = Backoff.exponentialAsync(function()
+				local success, result = pcall(ProcessShard(Shard));
+				if (not success) then
+					return false, result; -- Return (false, error) on failure
+				end;
+				return true, result; -- Return (true, result) on success
+			end, {
+				maxRetries = 3,
+				minInterval = 0.5,
+				maxInterval = 5,
+				exponentBase = 2,
+				onSuccess = function(attempt, result)
+					if attempt > 1 then
+						self._logger:Log(1, `GetRangeAsync success on attempt {attempt} for shard {shardIndex}`)
+					end
+				end,
+				onRetry = function(attempt, lastError, nextWaitSeconds)
+					self._logger:Log(2, `Retrying GetRangeAsync for shard {shardIndex} (attempt {attempt}) after {nextWaitSeconds}s: {lastError}`);
+				end,
+				onGiveUp = function(attempt, lastError)
+					self._logger:Log(3, `Failed to get data from shard {shardIndex} after {attempt} attempts: {lastError}`);
+				end,
+			});
+			
+			if (not backoffSuccess) then
+				return reject(backoffResult);
 			end;
-			return resolve(Result);
+			return resolve(backoffResult);
 		end):andThen(function(data)
 			for _, record in data do
 				ProcessRecord(record);

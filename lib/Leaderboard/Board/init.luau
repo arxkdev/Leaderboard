@@ -269,71 +269,106 @@ function Board:Get(amount, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
 
-	local function RetrieveTopData()
-		if (OFFLINE_ENVIRONMENT) then
-			return {} :: { TopData }
-		end;
-
-		if (self._storeType == "MemoryStore") then
-			local Result = self._store:Get(amount, sortDirection):awaitValue();
-			local Promises = {};
-			for rank, data in pairs(Result) do
-				table.insert(Promises, Promise.new(function(resolve)
-					resolve(Transform(rank, data.key, data.value))
-				end));
-			end;
-			return Promise.all(Promises):awaitValue() :: { TopData };
-		else -- TODO: This will be where DataStoreShards are used. Make sure that's explicitly stated.
-			-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
-			-- if (RequestBudget < 1) then
-			-- 	warn(`Skipping getting top data for {self._boardKey} due to insufficient budget`);
-			-- 	return {};
-			-- end;
-			local Result = self._store:GetSortedAsync(sortDirection ~= "Descending", amount);
-			local Data = Result:GetCurrentPage() :: {any};
-			local Promises = {};
-			for rank, data in pairs(Data) do
-				table.insert(Promises, Promise.new(function(resolve)
-					resolve(Transform(rank, data.key, data.value))
-				end));
-			end;
-			return Promise.all(Promises):awaitValue() :: { TopData };
-		end;
-	end;
-
 	return Promise.new(function(resolve, reject)
-		-- Use Backoff to retry RetrieveTopData with exponential backoff
-		local backoffSuccess, backoffResult = Backoff.exponentialAsync(function()
-			local success, result = pcall(function()
-				return RetrieveTopData();
-			end);
-			if (not success) then
-				return false, result; -- Return (false, error) on failure
+		local Success, Result = pcall(function()
+			if (OFFLINE_ENVIRONMENT) then
+				return {} :: { TopData }
 			end;
-			return true, result; -- Return (true, result) on success
-		end, {
-			maxRetries = 3,
-			minInterval = 0.5,
-			maxInterval = 5,
-			exponentBase = 2,
-			onSuccess = function(attempt, result)
-				if attempt > 1 then
-					self._logger:Log(1, `RetrieveTopData success on attempt {attempt}`)
-				end
-			end,
-			onRetry = function(attempt, lastError, nextWaitSeconds)
-				self._logger:Log(2, `Retrying Get for "{self._boardKey}" (attempt {attempt}) after {nextWaitSeconds}s: {lastError}`);
-			end,
-			onGiveUp = function(attempt, lastError)
-				self._logger:Log(3, `Failed to get top data for "{self._boardKey}" after {attempt} attempts: {lastError}`);
-			end,
-		});
-		
-		if (not backoffSuccess) then
-			warn(`Leaderboard had trouble getting top data with error: {backoffResult}`);
-			return reject(backoffResult);
+
+			if (self._storeType == "MemoryStore") then
+				-- Use Backoff to retry Get with exponential backoff
+				local backoffSuccess, backoffResult = Backoff.exponentialAsync(function()
+					local success, result = pcall(function()
+						return self._store:Get(amount, sortDirection):awaitValue();
+					end);
+					if (not success) then
+						return false, result; -- Return (false, error) on failure
+					end;
+					return true, result; -- Return (true, result) on success
+				end, {
+					maxRetries = 3,
+					minInterval = 0.5,
+					maxInterval = 5,
+					exponentBase = 2,
+					onSuccess = function(attempt, result)
+						if attempt > 1 then
+							self._logger:Log(1, `MemoryStore Get success on attempt {attempt} for "{self._boardKey}"`)
+						end
+					end,
+					onRetry = function(attempt, lastError, nextWaitSeconds)
+						self._logger:Log(2, `Retrying MemoryStore Get for "{self._boardKey}" (attempt {attempt}) after {nextWaitSeconds}s: {lastError}`);
+					end,
+					onGiveUp = function(attempt, lastError)
+						self._logger:Log(3, `Failed to get data from MemoryStore for "{self._boardKey}" after {attempt} attempts: {lastError}`);
+					end,
+				});
+				
+				if (not backoffSuccess) then
+					error(backoffResult); -- Throw error to be caught by outer pcall
+				end;
+				
+				local Result = backoffResult;
+				local Promises = {};
+				for rank, data in pairs(Result) do
+					table.insert(Promises, Promise.new(function(resolve)
+						resolve(Transform(rank, data.key, data.value))
+					end));
+				end;
+				return Promise.all(Promises):awaitValue() :: { TopData };
+			else -- TODO: This will be where DataStoreShards are used. Make sure that's explicitly stated.
+				-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
+				-- if (RequestBudget < 1) then
+				-- 	warn(`Skipping getting top data for {self._boardKey} due to insufficient budget`);
+				-- 	return {};
+				-- end;
+				-- Use Backoff to retry GetSortedAsync with exponential backoff
+				local backoffSuccess, backoffResult = Backoff.exponentialAsync(function()
+					local success, result = pcall(function()
+						return self._store:GetSortedAsync(sortDirection ~= "Descending", amount);
+					end);
+					if (not success) then
+						return false, result; -- Return (false, error) on failure
+					end;
+					return true, result; -- Return (true, result) on success
+				end, {
+					maxRetries = 3,
+					minInterval = 0.5,
+					maxInterval = 5,
+					exponentBase = 2,
+					onSuccess = function(attempt, result)
+						if attempt > 1 then
+							self._logger:Log(1, `GetSortedAsync success on attempt {attempt} for "{self._boardKey}"`)
+						end
+					end,
+					onRetry = function(attempt, lastError, nextWaitSeconds)
+						self._logger:Log(2, `Retrying GetSortedAsync for "{self._boardKey}" (attempt {attempt}) after {nextWaitSeconds}s: {lastError}`);
+					end,
+					onGiveUp = function(attempt, lastError)
+						self._logger:Log(3, `Failed to get sorted data for "{self._boardKey}" after {attempt} attempts: {lastError}`);
+					end,
+				});
+				
+				if (not backoffSuccess) then
+					error(backoffResult); -- Throw error to be caught by outer pcall
+				end;
+				
+				local Result = backoffResult;
+				local Data = Result:GetCurrentPage() :: {any};
+				local Promises = {};
+				for rank, data in pairs(Data) do
+					table.insert(Promises, Promise.new(function(resolve)
+						resolve(Transform(rank, data.key, data.value))
+					end));
+				end;
+				return Promise.all(Promises):awaitValue() :: { TopData };
+			end;
+		end);
+
+		if (not Success) then
+			warn(`Leaderboard had trouble getting top data with error: {Result}`);
+			return reject(Result);
 		end;
-		return resolve(backoffResult);
+		return resolve(Result);
 	end) :: Promise.TypedPromise<{ TopData }>;
 end
 
