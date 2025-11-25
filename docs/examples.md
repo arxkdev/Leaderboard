@@ -20,7 +20,8 @@ local MoneyLeaderboard = Leaderboard.new(LeaderboardTypes, {
     -- Settings
     Automation = true,
     Interval = 5,
-    RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
+    MaxRecords = 100, -- Maximum number of records to store
+    DisplayCount = 50, -- Number of records to display (defaults to 50)
 })
 
 local function FunctionToIncrementMoney(userId: number, amount: number)
@@ -97,7 +98,8 @@ local Leaderboards = {
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
 	Automation = true,
 	Interval = 15,
-	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
+	MaxRecords = 100, -- Maximum number of records to store
+	DisplayCount = 50, -- Number of records to display (defaults to 50)
 });
 
 local function IncrementMoneyTest()

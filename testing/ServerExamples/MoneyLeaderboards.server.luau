@@ -10,19 +10,32 @@ type TopData = {Leaderboard.TopData};
 local DEBUG = RunService:IsStudio();
 
 -- Constants
-local Key = `Money-{12}`;
+local Key = "2";
 local Leaderboards = {
-	["Hourly"] = `Hourly-{Key}`,
-	["Daily"] = `Daily-{Key}`,
-	["Weekly"] = `Weekly-{Key}`,
-	["Monthly"] = `Monthly-{Key}`,
-	["AllTime"] = `AllTime-{Key}`,
+	["Weekly"] = {
+		Name = `Money-Weekly-{Key}`,
+		Automation = true,
+		Interval = 30,
+		MaxRecords = 1000,
+		DisplayCount = 50,
+	},
+	--[[
+	["Monthly"] = {
+		Name = `Money-Monthly-{Key}`,
+		Automation = true,
+		Interval = 30,
+		MaxRecords = 500,
+		DisplayCount = 50,
+	},]]
+	["AllTime"] = {
+		Name = `Money-AllTime-{Key}`,
+		Automation = true,
+		Interval = 30,
+		MaxRecords = 500,
+		DisplayCount = 50,
+	},
 };
-local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
-	Automation = true,
-	Interval = 120,
-	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
-}, DEBUG);
+local MoneyLeaderboard = Leaderboard.new(Leaderboards, true);
 
 local function UpdateBoard(data: TopData, part: BasePart)
 	-- Remove current items
@@ -46,6 +59,7 @@ end
 
 local function IncrementMoneyTest()
 	for _, player in Players:GetPlayers() do
+		print("Incrementing money test for player", player.UserId);
 		MoneyLeaderboard:IncrementValues(Leaderboards, player.UserId, 111);
 	end;
 
@@ -66,10 +80,22 @@ MoneyLeaderboard.Updated:Connect(function(boards)
 		print(`[Money] Updating board {board.Type} - with {#board.Data} entries!`);
 		UpdateBoard(board.Data, workspace.Leaderboards["Money"][board.Type]);
 	end;
-
-	-- Increment
-	IncrementMoneyTest();
 end);
 -- MoneyLeaderboard.BoardUpdated:Connect(function(board)
 -- 	print(board.Type, board.Data);
 -- end);
+
+
+task.delay(3, function()
+	print("Setting money test");
+	MoneyLeaderboard:SetValues("All", 6271821, 1000);
+	task.wait(1);
+	print(MoneyLeaderboard:GetRecords("All", 100):expect());
+end)
+
+
+--[[task.delay(10, function()
+	print("Incrementing money test");
+	IncrementMoneyTest();
+	print(MoneyLeaderboard:GetRecords("All", 100):expect());
+end)]]
