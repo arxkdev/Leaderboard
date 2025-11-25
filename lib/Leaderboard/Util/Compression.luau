@@ -7,7 +7,7 @@ function Compression.Compress(x: number): number
 end
 
 function Compression.Decompress(x: number): number
-	return (x ~= 0 and math.floor(math.pow(LOGARITHMIC_BASE, x)) or 0);
+	return (x ~= 0 and math.round(math.pow(LOGARITHMIC_BASE, x)) or 0);
 end
 
 return table.freeze(Compression) :: {
