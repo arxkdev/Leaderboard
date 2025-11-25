@@ -87,6 +87,7 @@ export type LeaderboardTypeArgument = {
 	@field _lastSaved number
 	@field _isFetching boolean
 	@field _lastFetch number
+	@field _saveThread thread?
 	@field _logger Logger.Logger?
 ]=]
 export type LeaderboardArguments = {
@@ -100,6 +101,7 @@ export type LeaderboardArguments = {
 	_lastSaved: number,
 	_isFetching: boolean,
 	_lastFetch: number,
+	_saveThread: thread?,
 	_trove: typeof(Trove.new),
 	_logger: Logger.Logger?,
 }
@@ -138,7 +140,7 @@ type ValueQueueType = {
 	@field SetValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
 	@field UpdateStoreValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
 	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
-	@field SaveValues (self: Leaderboard) -> Promise.TypedPromise<nil>
+	@field SaveValues (self: Leaderboard) -> Promise.TypedPromise<boolean>
 	@field Destroy (self: Leaderboard) -> ()
 	@field new (leaderboardTypes: LeaderboardTypeArgument, debugMode: boolean?) -> Leaderboard
 ]=]
@@ -148,7 +150,7 @@ type Object = {
 	SetValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
-	SaveValues: (self: Leaderboard) -> Promise.TypedPromise<nil>,
+	SaveValues: (self: Leaderboard) -> Promise.TypedPromise<boolean>,
 	Destroy: (self: Leaderboard) -> (),
 	new: (leaderboardTypes: LeaderboardTypeArgument, debugMode: boolean?) -> Leaderboard,
 }
@@ -310,6 +312,7 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 	self._isSaving = false;
 	self._lastFetch = 0;
 	self._isFetching = false;
+	self._saveThread = nil;
 	self._trove = Trove.new();
 	self._logger = Logger.new("Leaderboard", debugMode or false);
 
@@ -332,36 +335,44 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 		end);
 	end;
 
-	-- Start automation threads for each board type that has automation enabled
+	-- Collect all board types with automation enabled for refresh loops
+	local automationBoards: {{
+		boardType: LeaderboardType,
+		refreshInterval: number,
+		displayCount: number,
+	}} = {};
+	local boardTypeIndex = 0;
+	
 	for boardType, normalizedConfig in normalizedConfigs do
 		local boardConfig = normalizedConfig.Config;
 		if (boardConfig and boardConfig.Automation) then
-			-- Capture boardType in a local variable to avoid closure issues
-			local capturedBoardType = boardType;
-			local saveInterval = boardConfig.SaveInterval or 30;
 			local refreshInterval = boardConfig.RefreshInterval or 600;
 			local displayCount = boardConfig.DisplayCount or 50;
+			boardTypeIndex += 1;
 			
-			local automationThread = Spawn(function()
-				local lastSaveTime = 0;
+			table.insert(automationBoards, {
+				boardType = boardType,
+				refreshInterval = refreshInterval,
+				displayCount = displayCount,
+			});
+			
+			-- Start refresh loop for this board type with staggered delay
+			local capturedBoardType = boardType;
+			local staggerDelay = (boardTypeIndex - 1) * 0.5; -- Stagger by 0.5 seconds per board type
+			
+			local refreshThread = Spawn(function()
+				-- Initial stagger delay
+				if (staggerDelay > 0) then
+					task.wait(staggerDelay);
+				end;
+				
 				local lastRefreshTime = 0;
-
 				while (true) do
 					local currentTime = tick();
 					
-					-- Save values if SaveInterval has passed
-					if (currentTime - lastSaveTime >= saveInterval) then
-						print("run")
-						-- Update the value from the queue
-						self:SaveValues();
-						lastSaveTime = currentTime;
-					end;
-
 					-- Refresh records if RefreshInterval has passed
 					if (currentTime - lastRefreshTime >= refreshInterval) then
-						print("get records")
 						-- Get the top and update the signal for this specific board type
-						-- Create a dictionary with capturedBoardType as key (not an array)
 						local TopData = self:GetRecords({[capturedBoardType] = true}, displayCount):awaitValue() :: {AllTopData};
 						if (TopData and #TopData > 0) then
 							self.Updated:Fire(TopData);
@@ -371,18 +382,35 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 						end;
 						lastRefreshTime = currentTime;
 					end;
-
-					-- Wait for the shorter of the two intervals to check again
-					local timeUntilNextSave = math.max(0, saveInterval - (currentTime - lastSaveTime));
-					local timeUntilNextRefresh = math.max(0, refreshInterval - (currentTime - lastRefreshTime));
-					local waitTime = math.max(0.1, math.min(timeUntilNextSave, timeUntilNextRefresh));
-					task.wait(waitTime);
+					
+					-- Wait until next refresh check
+					local timeUntilNextRefresh = math.max(0.1, refreshInterval - (currentTime - lastRefreshTime));
+					task.wait(timeUntilNextRefresh);
 				end;
 			end);
 			-- Add thread to Trove for cleanup
-			self._trove:Add(automationThread);
+			self._trove:Add(refreshThread);
 		end;
 	end;
+	
+	-- Start a single save loop that throttles to 1 per second
+	-- This loop processes the value queue continuously, one item at a time
+	self._saveThread = Spawn(function()
+		while (true) do
+			-- Process one item from the queue (SaveValues handles finding the next item)
+			local processed = self:SaveValues():awaitValue();
+			
+			if (processed) then
+				-- Item was processed, wait 1 second before processing next item
+				task.wait(1);
+			else
+				-- No items in queue, check again in 0.1 seconds
+				task.wait(0.1);
+			end;
+		end;
+	end);
+	-- Add thread to Trove for cleanup
+	self._trove:Add(self._saveThread);
 
 	-- Player removing
 	local playerRemovingConnection = Players.PlayerRemoving:Connect(function(player)
@@ -397,51 +425,108 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 	return self;
 end
 
--- Flushes the queue
--- Should only be used every 90-120 seconds
+-- Processes a single item from the queue (throttled to 1 per second)
 --[=[
 	@within Leaderboard
-	@return Promise.TypedPromise<nil>
+	@return Promise.TypedPromise<boolean> -- Returns true if an item was processed, false if queue is empty
 	@yields
-	Updates the actual store value(s) (should only be used every 90-120 seconds)
+	Processes a single item from the value queue. Designed to be called repeatedly at 1 per second.
 ]=]
 function Leaderboard:SaveValues()
-	local Promises = {};
+	-- Set saving flag FIRST to prevent concurrent execution
+	-- This must be done atomically before any queue access
+	if (self._isSaving) then
+		return Promise.resolve(false);
+	end;
 	self._isSaving = true;
-
-	for UserId, BoardType in self._valueQueue do
-		for _, Data in BoardType do
-			local PromiseUpdate = Data.Board:Update(UserId, function(oldValue)
-				if (Data.OperationType == "Set") then
-					-- Set operation: use the value/function directly
-					if (type(Data.Amount) == "function") then
-						return Data.Amount(oldValue);
-					else
-						return Data.Amount;
-					end;
-				elseif (Data.OperationType == "Increment") then
-					-- Increment operation: add the amount
-					if (type(Data.Amount) == "function") then
-						return oldValue + Data.Amount(oldValue);
-					else
-						return oldValue + Data.Amount;
-					end;
-				else
-					self._logger:Log(3, `Invalid operation type: {Data.OperationType} for user {UserId}`);
-					return oldValue;
-				end;
-			end):andThen(function()
-				self._valueQueue[UserId] = nil;
-			end):catch(function(err)
-				self._logger:Log(3, `Error updating value for user {UserId}: {err}`);
-			end);
-			table.insert(Promises, PromiseUpdate);
+	
+	-- Find the first item in the queue to process
+	local userIdToProcess: number? = nil;
+	local boardTypeToProcess: LeaderboardType? = nil;
+	local dataToProcess: {Amount: number | ((number) -> number), Board: Board, OperationType: OperationType}? = nil;
+	
+	-- Iterate through queue to find first item (maintains chronological order)
+	for userId, boardTypes in self._valueQueue do
+		for boardType, data in boardTypes do
+			userIdToProcess = userId;
+			boardTypeToProcess = boardType;
+			dataToProcess = data;
+			break;
+		end;
+		if (userIdToProcess) then
+			break;
 		end;
 	end;
-
-	return Promise.all(Promises):finally(function()
+	
+	-- If no items in queue, reset flag and return
+	if (not userIdToProcess or not boardTypeToProcess or not dataToProcess) then
+		self._isSaving = false;
+		return Promise.resolve(false);
+	end;
+	
+	-- CRITICAL: Remove item from queue IMMEDIATELY after finding it, before processing
+	-- This prevents race conditions where multiple threads process the same item
+	-- Store references before removal
+	local boardRef = dataToProcess.Board;
+	local operationType = dataToProcess.OperationType;
+	local amount = dataToProcess.Amount;
+	
+	-- Remove from queue immediately
+	if (self._valueQueue[userIdToProcess]) then
+		self._valueQueue[userIdToProcess][boardTypeToProcess] = nil;
+		-- If no more boardTypes for this userId, remove the userId entry entirely
+		local hasRemainingBoards = false;
+		for _ in self._valueQueue[userIdToProcess] do
+			hasRemainingBoards = true;
+			break;
+		end;
+		if (not hasRemainingBoards) then
+			self._valueQueue[userIdToProcess] = nil;
+		end;
+	end;
+	
+	-- Process the single item using stored references (item already removed from queue)
+	return boardRef:Update(userIdToProcess, function(oldValue)
+		if (operationType == "Set") then
+			-- Set operation: use the value/function directly
+			if (type(amount) == "function") then
+				return amount(oldValue);
+			else
+				return amount;
+			end;
+		elseif (operationType == "Increment") then
+			-- Increment operation: add the amount
+			if (type(amount) == "function") then
+				return oldValue + amount(oldValue);
+			else
+				return oldValue + amount;
+			end;
+		else
+			self._logger:Log(3, `Invalid operation type: {operationType} for user {userIdToProcess}`);
+			return oldValue;
+		end;
+	end):andThen(function()
+		-- Item was already removed from queue, just reset flag
 		self._isSaving = false;
 		self._lastSaved = tick();
+		return true;
+	end):catch(function(err)
+		self._logger:Log(3, `Error updating value for user {userIdToProcess} in board {boardTypeToProcess}: {err}`);
+		-- On error, re-add the item to the queue for retry
+		-- This ensures failed items can be retried
+		if (not self._valueQueue[userIdToProcess]) then
+			self._valueQueue[userIdToProcess] = {};
+		end;
+		self._valueQueue[userIdToProcess][boardTypeToProcess] = {
+			Amount = amount,
+			Board = boardRef,
+			OperationType = operationType,
+		};
+		self._isSaving = false;
+		self._lastSaved = tick();
+		-- Return false so the save thread doesn't wait 1 second
+		-- This allows other items to be processed while the failed item remains in queue for retry
+		return false;
 	end);
 end
 
@@ -532,7 +617,6 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 
 	local Queue = self._valueQueue[userId];
 	for boardType in boardTypes do
-		print("Incrementing value for board type", boardType);
 		-- Update the value queue
 		if (not Queue[boardType]) then
 			Queue[boardType] = {
@@ -540,10 +624,8 @@ function Leaderboard:IncrementValues(boardTypes, userId, amount)
 				Board = self._boards[boardType],
 				OperationType = "Increment",
 			};
-			print("Added value to queue for board type", boardType);
 		else
 			Queue[boardType].Amount += amount;
-			print("Incremented value for board type", boardType);
 		end;
 	end;
 end
@@ -625,6 +707,21 @@ end
 	Destroys the leaderboard
 ]=]
 function Leaderboard:Destroy()
+	-- Stop the save thread first to prevent race conditions with concurrent SaveValues() calls
+	if (self._saveThread) then
+		task.cancel(self._saveThread);
+		self._saveThread = nil;
+		-- Wait for any in-flight SaveValues() to complete
+		-- Poll until _isSaving is false or timeout after 2 seconds
+		local waitStart = tick();
+		while (self._isSaving and (tick() - waitStart) < 2) do
+			task.wait(0.05);
+		end;
+		if (self._isSaving) then
+			self._logger:Log(2, "Leaderboard:Destroy() Save operation still in progress after cancellation wait");
+		end;
+	end;
+	
 	if (not self._isSaving and not self._isFetching) then
 		local TimeSinceLastSaved = tick() - self._lastSaved;
 		local TimeSinceLastFetch = tick() - self._lastFetch;
@@ -636,7 +733,21 @@ function Leaderboard:Destroy()
 		--]]
 		if ((TimeSinceLastSaved >= 60 * 2 and TimeSinceLastFetch >= 60 * 2) or (self._lastFetch == 0 and self._lastSaved == 0)) then
 			self._logger:Log(1, "Leaderboard:Destroy() Saving values");
-			self:SaveValues();
+			-- Await the save operation to ensure it completes before destroying
+			-- Process remaining items with a timeout to avoid hanging BindToClose
+			local maxSaveAttempts = 100; -- Limit to prevent infinite loops
+			local saveAttempts = 0;
+			while (saveAttempts < maxSaveAttempts) do
+				local processed = self:SaveValues():awaitValue();
+				if (not processed) then
+					-- No more items to process
+					break;
+				end;
+				saveAttempts += 1;
+			end;
+			if (saveAttempts >= maxSaveAttempts) then
+				self._logger:Log(2, `Leaderboard:Destroy() Reached max save attempts ({maxSaveAttempts}), some items may remain unsaved`);
+			end;
 		end;
 	end;
 

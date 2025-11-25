@@ -274,14 +274,38 @@ function Board:Get(amount, sortDirection)
 	end;
 
 	return Promise.new(function(resolve, reject)
-		local Success, Result = pcall(function()
-			return RetrieveTopData();
-		end);
-		if (not Success) then
-			warn(`Leaderboard had trouble getting top data with error: {Result}`);
-			return reject(Result);
+		-- Use Backoff to retry RetrieveTopData with exponential backoff
+		local backoffSuccess, backoffResult = Backoff.exponentialAsync(function()
+			local success, result = pcall(function()
+				return RetrieveTopData();
+			end);
+			if (not success) then
+				return false, result; -- Return (false, error) on failure
+			end;
+			return true, result; -- Return (true, result) on success
+		end, {
+			maxRetries = 3,
+			minInterval = 0.5,
+			maxInterval = 5,
+			exponentBase = 2,
+			onSuccess = function(attempt, result)
+				if attempt > 1 then
+					self._logger:Log(1, `RetrieveTopData success on attempt {attempt}`)
+				end
+			end,
+			onRetry = function(attempt, lastError, nextWaitSeconds)
+				self._logger:Log(2, `Retrying Get for "{self._boardKey}" (attempt {attempt}) after {nextWaitSeconds}s: {lastError}`);
+			end,
+			onGiveUp = function(attempt, lastError)
+				self._logger:Log(3, `Failed to get top data for "{self._boardKey}" after {attempt} attempts: {lastError}`);
+			end,
+		});
+		
+		if (not backoffSuccess) then
+			warn(`Leaderboard had trouble getting top data with error: {backoffResult}`);
+			return reject(backoffResult);
 		end;
-		return resolve(Result);
+		return resolve(backoffResult);
 	end) :: Promise.TypedPromise<{ TopData }>;
 end
 
