@@ -12,11 +12,16 @@ local Leaderboards = {
 	["15MinutesRolling"] = {60 * 15, `15MinutesRolling-{Key}`}, -- 15 minutes rolling leaderboard
 	["30MinutesRolling"] = {60 * 30, `30MinutesRolling-{Key}`}, -- 30 minutes rolling leaderboard
 };
-local GoldLeaderboard = Leaderboard.new(Leaderboards, {
-	Automation = true,
-	Interval = 120,
-	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
-});
+-- Note: Rolling leaderboards use {rollingExpiry, name} format
+-- For automation, you can use BoardConfig format instead:
+-- ["15MinutesRolling"] = {
+--     Name = `15MinutesRolling-{Key}`,
+--     Automation = true,
+--     Interval = 120,
+--     RecordCount = 100,
+-- },
+-- But rolling expiry would need to be handled separately
+local GoldLeaderboard = Leaderboard.new(Leaderboards, true);
 
 local function UpdateBoard(data: TopData, part: BasePart)
 	-- Remove current items

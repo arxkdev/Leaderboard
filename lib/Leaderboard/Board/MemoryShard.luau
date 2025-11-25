@@ -7,7 +7,8 @@ local Promise = require(Packages.Promise);
 local Util = require(Leaderboard.Util);
 local Logger = require(Leaderboard.Logger);
 local Trove = require(Packages.Trove);
-local Backoff = require(Packages.Backoff);
+local _Backoff = require(Packages.Backoff);
+local Manifest = require(script.Parent.Manifest);
 
 -- Variables
 local Compression = Util.Compression;
@@ -18,6 +19,9 @@ local FNV_1A_32 = Util.FNV_1A_32;
 local FALLBACK_EXPIRY_TIMES = Util.FALLBACK_EXPIRY_TIMES;
 local SHARD_CLEANUP_SETTINGS = Util.SHARD_CLEANUP_SETTINGS;
 local OFFLINE_ENVIRONMENT = game.GameId == 0;
+
+-- Constants
+local DEFAULT_RECORD_COUNT = Manifest.DEFAULT_RECORD_COUNT;
 
 --[=[
     @within MemoryShard
@@ -71,6 +75,8 @@ export type TopData = {
 	DisplayName: string,
 }
 
+-- Manifest types are available via Manifest module
+
 --[=[
 	@within MemoryShard
 	@interface Object
@@ -86,7 +92,7 @@ export type TopData = {
 	@field Set (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>
 	@field Get (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>
 	@field Destroy (self: MemoryShard) -> ()
-	@field new (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard
+	@field new (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, recordCount: number?, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard
 ]=]
 type Object = {
 	__index: Object,
@@ -102,7 +108,7 @@ type Object = {
 	Set: (self: MemoryShard, userId: number, value: number | (number) -> (number)) -> Promise.TypedPromise<boolean>,
 	Get: (self: MemoryShard, amount: number, sortDirection: string) -> Promise.TypedPromise<{TopData}>,
 	Destroy: (self: MemoryShard) -> (),
-	new: (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard,
+	new: (leaderboardType: LeaderboardType, boardKey: string, shardCount: number, recordCount: number?, rollingExpiry: number?, debugMode: boolean?) -> MemoryShard,
 }
 
 --[=[
@@ -112,6 +118,33 @@ type Object = {
 ]=]
 local MemoryShard: Object = {} :: Object;
 MemoryShard.__index = MemoryShard;
+
+--[=[
+	@param recordCount number
+	@return number
+	
+	Calculates the recommended shard count based on record count.
+	Warns if recordCount exceeds 100,000 or if shardCount > 16 is recommended.
+]=]
+local function _CalculateShardCount(recordCount: number): number
+	if recordCount <= 100 then
+		return 1;
+	elseif recordCount >= 101 and recordCount <= 499 then
+		return 2;
+	elseif recordCount >= 500 and recordCount <= 5000 then
+		return 3;
+	elseif recordCount >= 5001 and recordCount <= 10000 then
+		return 5;
+	elseif recordCount >= 10001 and recordCount <= 30000 then
+		return 15;
+	elseif recordCount >= 30001 and recordCount <= 100000 then
+		warn(`[MemoryShard] RecordCount of {recordCount} may quickly reach MemoryStore limits. Consider using fewer records or rotating to a new epoch.`);
+		return 16;
+	else
+		warn(`[MemoryShard] RecordCount of {recordCount} exceeds recommended maximum of 100,000. This may quickly reach MemoryStore limits.`);
+		return 16;
+	end;
+end
 
 local function GetResultCount(shardCount: number): number
 	-- Depending on how many shards there are the result count should be based on
@@ -125,16 +158,16 @@ end
 	@param leaderboardType LeaderboardType
 	@param boardKey string
 	@param shardCount number
+	@param recordCount number?
 	@param rollingExpiry number?
 	@param debugMode boolean?
 
 	Creates a new MemoryShard. This is not a viable solution anymore, as the limits to MemoryStoreService are too poor.
 	See: https://devforum.roblox.com/t/introducing-memorystore-sortedmap-sortkey-beta/2673559/23
 ]=]
-function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, shardCount: number, rollingExpiry: number?, debugMode: boolean?)
+function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, shardCount: number, recordCount: number?, rollingExpiry: number?, debugMode: boolean?)
 	local self = setmetatable({} :: MemoryShardArguments, MemoryShard);
 	self._shards = {};
-	self._shardCount = shardCount;
 	self._type = leaderboardType;
 	self._isRollingExpiry = rollingExpiry ~= nil;
 	self._fallbackExpiry = (rollingExpiry ~= nil) and rollingExpiry or (leaderboardType == "Monthly") and GetDaysInMonth() * 86400 or FALLBACK_EXPIRY_TIMES[self._type];
@@ -143,20 +176,33 @@ function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, sha
 	self._maxEntriesPerShard = SHARD_CLEANUP_SETTINGS.MAX_ENTRIES_PER_SHARD;
 	self._trove = Trove.new();
 
+	-- Set default record count if not provided
+	local maxItems = recordCount or DEFAULT_RECORD_COUNT;
+
+	-- Warn if shardCount exceeds recommended maximum
+	if (shardCount > 16) then
+		warn(`[MemoryShard] Shard count of {shardCount} exceeds recommended maximum of 16. This may result in more API calls. Recommended range: 0-16 based on RecordCount.`);
+	end;
+
+	-- Load or create manifest
+	local _manifest, validatedShardCount = Manifest.LoadOrCreate(boardKey, shardCount, maxItems);
+	self._shardCount = validatedShardCount;
+
 	-- Each shard is a MemoryStoreSortedMap with a unique name based on the service name and shard index
-	for Index = 1, shardCount do
+	for Index = 1, validatedShardCount do
 		if (OFFLINE_ENVIRONMENT) then
 			continue;
 		end;
 
+		local ShardKey = Manifest.GetShardKey(boardKey, Index);
 		local Success, Response = pcall(function()
-			return MemoryStoreService:GetSortedMap(`{boardKey}_Shard{Index}`);
+			return MemoryStoreService:GetSortedMap(ShardKey);
 		end);
 
 		if (Success) then
-			self._logger:Log(1, `Created MemoryStoreSortedMap for "{boardKey}_Shard{Index}"`);
+			self._logger:Log(1, `Created MemoryStoreSortedMap for "{ShardKey}"`);
 		else
-			self._logger:Log(1, `Failed to create MemoryStoreSortedMap for "{boardKey}_Shard{Index}": {Response}`);
+			self._logger:Log(1, `Failed to create MemoryStoreSortedMap for "{ShardKey}": {Response}`);
 		end;
 
 		self._shards[Index] = Success and Response or nil;

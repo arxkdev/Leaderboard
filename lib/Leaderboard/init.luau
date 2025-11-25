@@ -68,10 +68,10 @@ export type LeaderboardType = "Hourly" | "Daily" | "Weekly" | "Monthly" | "Yearl
 
 --[=[
 	@within Leaderboard
-	@type LeaderboardTypeArgument {[LeaderboardType]: any}
+	@type LeaderboardTypeArgument {[LeaderboardType]: BoardConfig | string | {number & string}}
 ]=]
 export type LeaderboardTypeArgument = {
-	[LeaderboardType]: any,
+	[LeaderboardType]: BoardConfig | string | {number & string},
 }
 
 --[=[
@@ -140,7 +140,7 @@ type ValueQueueType = {
 	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
 	@field SaveValues (self: Leaderboard) -> Promise.TypedPromise<nil>
 	@field Destroy (self: Leaderboard) -> ()
-	@field new (leaderboardTypes: {LeaderboardType}, automationSettings: AutomationSettings?, debugMode: boolean?) -> Leaderboard
+	@field new (leaderboardTypes: LeaderboardTypeArgument, debugMode: boolean?) -> Leaderboard
 ]=]
 type Object = {
 	__index: Object,
@@ -150,22 +150,26 @@ type Object = {
 	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
 	SaveValues: (self: Leaderboard) -> Promise.TypedPromise<nil>,
 	Destroy: (self: Leaderboard) -> (),
-	new: (leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, debugMode: boolean?) -> Leaderboard,
+	new: (leaderboardTypes: LeaderboardTypeArgument, debugMode: boolean?) -> Leaderboard,
 }
 
 type Board = Board.Board;
 
 --[=[
 	@within Leaderboard
-	@interface AutomationSettings
+	@interface BoardConfig
+	@field Name string
 	@field Automation boolean?
 	@field Interval number?
-	@field RecordCount number | {[string]: number}?
+	@field RecordCount number?
+	@field Shards number?
 ]=]
-type AutomationSettings = {
-	Automation: boolean,
-	Interval: number,
-	RecordCount: number | {[string]: number},
+export type BoardConfig = {
+	Name: string,
+	Automation: boolean?,
+	Interval: number?,
+	RecordCount: number?,
+	Shards: number?,
 }
 
 --[=[
@@ -202,41 +206,84 @@ local Leaderboards = {} :: {[string]: Leaderboard};
 local Leaderboard: Object = {} :: Object;
 Leaderboard.__index = Leaderboard;
 
-local function IsValidLeaderboardType(leaderboardType: LeaderboardType, boardKey: string | {number & string}): boolean
+local function IsValidLeaderboardType(leaderboardType: LeaderboardType, boardKey: string | BoardConfig | {number & string}): boolean
 	if (type(boardKey) == "table") then
-		local RollingExpiry = type(boardKey) == "table" and boardKey[1] or nil;
-		return RollingExpiry >= MEMORY_STORE_SERVICE_MIN_EXPIRY and RollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY;
+		-- Check if it's a rolling expiry table {number, string} (not a BoardConfig)
+		-- BoardConfig has a Name field, rolling expiry tables don't
+		if (not (boardKey :: any).Name) then
+			-- It's a rolling expiry table {number, string}
+			local RollingExpiry = boardKey[1];
+			if (type(RollingExpiry) == "number") then
+				return RollingExpiry >= MEMORY_STORE_SERVICE_MIN_EXPIRY and RollingExpiry <= MEMORY_STORE_SERVICE_MAX_EXPIRY;
+			end;
+		end;
 	end;
 	return table.find(BOARD_TYPES, leaderboardType) ~= nil;
 end
 
 --[=[
+	@within Leaderboard
 	@param leaderboardTypes LeaderboardTypeArgument
-	@param automationSettings AutomationSettings?
 	@param debugMode boolean?
 	@return Leaderboard
 
 	Constructs a new leaderboard.
 ]=]
-function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSettings: AutomationSettings?, debugMode: boolean?)
+function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: boolean?)
 	-- Check if the leaderboard types are valid
 	SmartAssert(#KeysInDictionary(leaderboardTypes) > 0, "Leaderboard types must be greater than 0");
 	SmartAssert(#KeysInDictionary(leaderboardTypes) <= MAX_BOARDS, `You can only create up to {MAX_BOARDS} types of leaderboards`);
-	for boardType, boardKey in leaderboardTypes do
-		SmartAssert(IsValidLeaderboardType(boardType, boardKey), `Leaderboard type {boardType} is not valid`);
-		SmartAssert(boardKey ~= "", "Leaderboard key must not be empty");
+	
+	-- Validate and normalize board configs
+	local normalizedConfigs: {[LeaderboardType]: {Name: string, RollingExpiry: number?, Config: BoardConfig?}} = {};
+	for boardType, boardValue in leaderboardTypes do
+		SmartAssert(IsValidLeaderboardType(boardType, boardValue), `Leaderboard type {boardType} is not valid`);
+		
+		local boardName: string;
+		local rollingExpiry: number? = nil;
+		local boardConfig: BoardConfig? = nil;
+		
+		if (type(boardValue) == "string") then
+			SmartAssert(boardValue ~= "", "Leaderboard key must not be empty");
+			boardName = boardValue;
+		elseif (type(boardValue) == "table" and typeof(boardValue) == "table") then
+			-- Check if it's a BoardConfig
+			if (boardValue.Name) then
+				boardConfig = boardValue :: BoardConfig;
+				boardName = boardConfig.Name;
+				SmartAssert(type(boardConfig.Name) == "string", "BoardConfig.Name must be a string");
+				SmartAssert(boardConfig.Name ~= "", "BoardConfig.Name must not be empty");
+				if (boardConfig.Automation ~= nil) then
+					SmartAssert(type(boardConfig.Automation) == "boolean", "BoardConfig.Automation must be a boolean");
+				end;
+				if (boardConfig.Interval ~= nil) then
+					SmartAssert(type(boardConfig.Interval) == "number", "BoardConfig.Interval must be a number");
+				end;
+				if (boardConfig.RecordCount ~= nil) then
+					SmartAssert(type(boardConfig.RecordCount) == "number", "BoardConfig.RecordCount must be a number");
+				end;
+				if (boardConfig.Shards ~= nil) then
+					SmartAssert(type(boardConfig.Shards) == "number", "BoardConfig.Shards must be a number");
+				end;
+			else
+				-- It's a rolling expiry table {number, string}
+				rollingExpiry = boardValue[1];
+				boardName = boardValue[2];
+				SmartAssert(type(rollingExpiry) == "number", "Rolling expiry must be a number");
+				SmartAssert(type(boardName) == "string", "Board name must be a string");
+				SmartAssert(boardName ~= "", "Board name must not be empty");
+			end;
+		end;
+		
+		normalizedConfigs[boardType] = {
+			Name = boardName,
+			RollingExpiry = rollingExpiry,
+			Config = boardConfig,
+		};
 	end;
 
 	-- Check if they've exceeded the max leaderboards
 	SmartAssert(#KeysInDictionary(Leaderboards) < MAX_OVERALL_LEADERBOARDS, `You can only create up to {MAX_OVERALL_LEADERBOARDS} leaderboards`);
-
-	-- Asserts for settings
-	if (automationSettings) then
-		SmartAssert(type(automationSettings) == "table", "Settings must be a table");
-		SmartAssert(type(automationSettings.Automation) == "nil" or type(automationSettings.Automation) == "boolean", "Automation must be a boolean");
-		SmartAssert(type(automationSettings.Interval) == "nil" or type(automationSettings.Interval) == "number", "Interval must be a number");
-		SmartAssert(type(automationSettings.RecordCount) == "nil" or type(automationSettings.RecordCount) == "number" or type(automationSettings.RecordCount) == "table", "RecordCount must be a number or a table");
-	end;
 
 	local self = setmetatable({} :: LeaderboardArguments, Leaderboard);
 
@@ -265,43 +312,52 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, automationSe
 	Leaderboards[self._serviceKey] = self;
 
 	-- Initialize boards
-	for boardType, boardKey in leaderboardTypes do
-		local newBoard  = Board.new(typeof(boardKey) == "table" and boardKey[2] or boardKey, boardType, typeof(boardKey) == "table" and boardKey[1] or nil, debugMode);
+	for boardType, normalizedConfig in normalizedConfigs do
+		local newBoard = Board.new(normalizedConfig.Name, boardType, normalizedConfig.RollingExpiry, normalizedConfig.Config, debugMode);
 		self._boards[boardType] = newBoard;
 
-		-- Add to tove to cleanup the board when the leaderboard is destroyed
+		-- Add to trove to cleanup the board when the leaderboard is destroyed
 		self._trove:Add(function()
 			newBoard:Destroy();
 		end);
 	end;
 
-	-- Start automation
-	if (automationSettings and automationSettings.Automation) then
-		local automationThread = Spawn(function()
-			local CalledTimes = 0;
+	-- Start automation threads for each board type that has automation enabled
+	for boardType, normalizedConfig in normalizedConfigs do
+		local boardConfig = normalizedConfig.Config;
+		if (boardConfig and boardConfig.Automation) then
+			-- Capture boardType in a local variable to avoid closure issues
+			local capturedBoardType = boardType;
+			local interval = boardConfig.Interval or 300;
+			local recordCount = boardConfig.RecordCount or 100;
+			
+			local automationThread = Spawn(function()
+				local CalledTimes = 0;
 
-			while (true) do
-				-- Update the value from the queue
-				self:SaveValues();
+				while (true) do
+					-- Update the value from the queue
+					self:SaveValues();
 
-				-- We work in alternating turns, so one loop we'll update the value queue, the next we'll update the actual store value(s)
-				if (CalledTimes % 2 == 0 or CalledTimes == 0) then
-					-- Get the top and update the signal
-					local TopData = self:GetRecords("All", automationSettings.RecordCount):awaitValue() :: {AllTopData};
-					if (TopData) then
-						self.Updated:Fire(TopData);
-						for _, board in TopData do
-							self.BoardUpdated:Fire(board);
+					-- We work in alternating turns, so one loop we'll update the value queue, the next we'll update the actual store value(s)
+					if (CalledTimes % 2 == 0 or CalledTimes == 0) then
+						-- Get the top and update the signal for this specific board type
+						-- Create a dictionary with capturedBoardType as key (not an array)
+						local TopData = self:GetRecords({[capturedBoardType] = true}, recordCount):awaitValue() :: {AllTopData};
+						if (TopData and #TopData > 0) then
+							self.Updated:Fire(TopData);
+							for _, board in TopData do
+								self.BoardUpdated:Fire(board);
+							end;
 						end;
 					end;
-				end;
 
-				CalledTimes += 1;
-				task.wait(automationSettings.Interval);
-			end;
-		end);
-		-- Add thread to Trove for cleanup
-		self._trove:Add(automationThread);
+					CalledTimes += 1;
+					task.wait(interval);
+				end;
+			end);
+			-- Add thread to Trove for cleanup
+			self._trove:Add(automationThread);
+		end;
 	end;
 
 	-- Player removing
@@ -320,6 +376,8 @@ end
 -- Flushes the queue
 -- Should only be used every 90-120 seconds
 --[=[
+	@within Leaderboard
+	@return Promise.TypedPromise<nil>
 	@yields
 	Updates the actual store value(s) (should only be used every 90-120 seconds)
 ]=]
@@ -365,12 +423,12 @@ end
 
 -- Gets the data for all the top boards (should only be used every 90-120 seconds)
 --[=[
+	@within Leaderboard
 	@param boardTypes {LeaderboardType} | "All"
 	@param optionalRange {[string]: number} | number
 	@param sortDirection string
+	@return Promise.TypedPromise<{AllTopData}>
 	@yields
-
-	@return Promise<{AllTopData}>
 
 	Gets the data for all the top boards (should only be used every 90-120 seconds)
 ]=]
@@ -425,6 +483,7 @@ end
 -- Increments the queued value(s)
 -- either Leaderboard:IncrementValues(nil, userId, amount) or Leaderboard:IncrementValues({"Daily", "Weekly"}, userId, amount
 --[=[
+	@within Leaderboard
 	Increments the queued value(s)
 	@param boardTypes {LeaderboardType} | "All"
 	@param userId number
@@ -465,6 +524,7 @@ end
 -- Updates the queued value(s)
 -- either Leaderboard:SetValues("All", userId, value) or Leaderboard:SetValues({"Daily", "Weekly"}, userId, value
 --[=[
+	@within Leaderboard
 	Updates the queued value(s)
 	@param boardTypes {LeaderboardType} | "All"
 	@param userId number
@@ -502,6 +562,7 @@ end
 -- Updates the actual store value(s) (should only be used every 90-120 seconds)
 -- either Leaderboard:UpdateStoreValues(nil, userId, value) or Leaderboard:UpdateStoreValues({"Daily", "Weekly"}, userId, value
 --[=[
+	@within Leaderboard
 	Updates the actual store value(s) (should only be used every 90-120 seconds)
 	@param boardTypes {LeaderboardType} | "All"
 	@param userId number
@@ -533,6 +594,7 @@ end
 
 -- Destroys the leaderboard
 --[=[
+	@within Leaderboard
 	Destroys the leaderboard
 ]=]
 function Leaderboard:Destroy()

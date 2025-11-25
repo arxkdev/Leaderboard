@@ -7,19 +7,40 @@ local Leaderboard = require(ReplicatedStorage:WaitForChild("Leaderboard"));
 type TopData = {Leaderboard.TopData};
 
 -- Constants
-local Key = `Wins-{11}`;
+local Key = "1";
 local Leaderboards = {
-	["Hourly"] = `Hourly-{Key}`,
-	["Daily"] = `Daily-{Key}`,
-	["Weekly"] = `Weekly-{Key}`,
-	["Monthly"] = `Monthly-{Key}`,
-	["AllTime"] = `AllTime-{Key}`,
+	["Hourly"] = {
+		Name = `Wins-Hourly-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
+	["Daily"] = {
+		Name = `Wins-Daily-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
+	["Weekly"] = {
+		Name = `Wins-Weekly-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
+	["Monthly"] = {
+		Name = `Wins-Monthly-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
+	["AllTime"] = {
+		Name = `Wins-AllTime-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
 };
-local WinsLeaderboard = Leaderboard.new(Leaderboards, {
-	Automation = true,
-	Interval = 120,
-	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
-});
+local WinsLeaderboard = Leaderboard.new(Leaderboards, true);
 
 local function UpdateBoard(data: TopData, part: BasePart)
 	-- Remove current items

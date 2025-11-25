@@ -10,19 +10,40 @@ type TopData = {Leaderboard.TopData};
 local DEBUG = RunService:IsStudio();
 
 -- Constants
-local Key = `Money-{12}`;
+local Key = "1";
 local Leaderboards = {
-	["Hourly"] = `Hourly-{Key}`,
-	["Daily"] = `Daily-{Key}`,
-	["Weekly"] = `Weekly-{Key}`,
-	["Monthly"] = `Monthly-{Key}`,
-	["AllTime"] = `AllTime-{Key}`,
+	["Hourly"] = {
+		Name = `Money-Hourly-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
+	["Daily"] = {
+		Name = `Money-Daily-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
+	["Weekly"] = {
+		Name = `Money-Weekly-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
+	["Monthly"] = {
+		Name = `Money-Monthly-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
+	["AllTime"] = {
+		Name = `Money-AllTime-{Key}`,
+		Automation = true,
+		Interval = 120,
+		RecordCount = 100,
+	},
 };
-local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
-	Automation = true,
-	Interval = 120,
-	RecordCount = 100, -- You can also do {Daily = 50, Weekly = 50, Monthly = 50, AllTime = 100}
-}, DEBUG);
+local MoneyLeaderboard = Leaderboard.new(Leaderboards, true);
 
 local function UpdateBoard(data: TopData, part: BasePart)
 	-- Remove current items
@@ -46,6 +67,7 @@ end
 
 local function IncrementMoneyTest()
 	for _, player in Players:GetPlayers() do
+		print("Incrementing money test for player", player.UserId);
 		MoneyLeaderboard:IncrementValues(Leaderboards, player.UserId, 111);
 	end;
 
@@ -73,3 +95,18 @@ end);
 -- MoneyLeaderboard.BoardUpdated:Connect(function(board)
 -- 	print(board.Type, board.Data);
 -- end);
+
+
+task.delay(3, function()
+	print("Setting money test");
+	MoneyLeaderboard:SetValues("All", 6271821, 1000);
+	task.wait(1);
+	print(MoneyLeaderboard:GetRecords("All", 100):expect());
+end)
+
+
+--[[task.delay(10, function()
+	print("Incrementing money test");
+	IncrementMoneyTest();
+	print(MoneyLeaderboard:GetRecords("All", 100):expect());
+end)]]

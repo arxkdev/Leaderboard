@@ -8,6 +8,7 @@ local DataStoreService = game:GetService("DataStoreService");
 -- Requirements
 local Packages = script.Parent:FindFirstChild("Packages") or script.Parent.Parent; -- Development Wally places packages in script.Parent/Packages; Production Wally places packages in script.Parent.Parent
 local MemoryShard = require(script.MemoryShard);
+local Manifest = require(script.Manifest);
 local Promise = require(Packages.Promise);
 local Trove = require(Packages.Trove);
 local Util = require(script.Parent.Util);
@@ -131,7 +132,23 @@ local function GetCurrentId(leaderboardType: string)
 	return leaderboardType == "Hourly" and CurrentHour or leaderboardType == "Daily" and CurrentDay or leaderboardType == "Weekly" and CurrentWeek or leaderboardType == "Monthly" and CurrentMonth or leaderboardType == "Yearly" and CurrentYear or "AllTime" and "AllTime";
 end
 
-local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?): (string, (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?)
+type BoardConfig = {
+	Name: string,
+	Automation: boolean?,
+	Interval: number?,
+	RecordCount: number?,
+	Shards: number?,
+}
+
+type BoardConfig = {
+	Name: string,
+	Automation: boolean?,
+	Interval: number?,
+	RecordCount: number?,
+	Shards: number?,
+}
+
+local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, boardConfig: BoardConfig?, debugMode: boolean?): (string, (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?)
 	-- print(rollingExpiry);
 	-- if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
 	-- 	return "OrderedDataStore", DataStoreService:GetOrderedDataStore(`{GetCurrentId(leaderboardType)}-{boardKey}`);
@@ -140,8 +157,24 @@ local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType
 	-- If we are using a MemoryStore, we can just update the data
 	-- Not a viable solution anymore, limits are too poor
 	if (leaderboardType ~= "AllTime" or rollingExpiry) then
-		local ShardCount = rollingExpiry and ShardCalculation(rollingExpiry) or SHARD_COUNTS[leaderboardType];
-		return "MemoryStore", MemoryShard.new(leaderboardType, boardKey, ShardCount, rollingExpiry, debugMode);
+		local recordCount = boardConfig and boardConfig.RecordCount or Manifest.DEFAULT_RECORD_COUNT;
+		local shardCount: number;
+		
+		if (boardConfig and boardConfig.Shards) then
+			-- Use provided shard count
+			shardCount = boardConfig.Shards;
+		elseif (rollingExpiry) then
+			-- Use rolling expiry calculation
+			shardCount = ShardCalculation(rollingExpiry);
+		elseif (boardConfig and boardConfig.RecordCount) then
+			-- Calculate shard count from record count
+			shardCount = Manifest.CalculateShardCount(recordCount);
+		else
+			-- Fall back to default shard counts
+			shardCount = SHARD_COUNTS[leaderboardType] or 1;
+		end;
+		
+		return "MemoryStore", MemoryShard.new(leaderboardType, boardKey, shardCount, recordCount, rollingExpiry, debugMode);
 	end;
 
 	-- If we are in an offline enviornment
@@ -161,19 +194,21 @@ local function ConstructStore(boardKey: string, leaderboardType: LeaderboardType
 end
 
 --[=[
+	@within Board
 	@param boardKey string
 	@param leaderboardType LeaderboardType
 	@param rollingExpiry number?
+	@param boardConfig BoardConfig?
 	@param debugMode boolean?
 	@return Board
 
 	Creates a new board within the Leaderboard.
 ]=]
-function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, debugMode: boolean?): Board
+function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingExpiry: number?, boardConfig: BoardConfig?, debugMode: boolean?): Board
 	local self = setmetatable({} :: BoardArguments, Board);
 
 	self._boardKey = boardKey;
-	self._storeType, self._store = ConstructStore(boardKey, leaderboardType, rollingExpiry, debugMode);
+	self._storeType, self._store = ConstructStore(boardKey, leaderboardType, rollingExpiry, boardConfig, debugMode);
 	self._logger = Logger.new(`Board-{boardKey}`, debugMode or false);
 	self._trove = Trove.new();
 
@@ -185,7 +220,7 @@ function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingEx
 				local NewId = GetCurrentId(leaderboardType);
 				if (NewId ~= CurrentId) then
 					CurrentId = NewId;
-					self._storeType, self._store = ConstructStore(boardKey, leaderboardType, nil, debugMode);
+					self._storeType, self._store = ConstructStore(boardKey, leaderboardType, nil, boardConfig, debugMode);
 				end;
 				task.wait(5);
 			end;
@@ -197,6 +232,7 @@ end
 
 -- Gets the top data for a specific board
 --[=[
+	@within Board
 	@param amount number
 	@param sortDirection string?
 	@return Promise.TypedPromise<{TopData}>
@@ -257,10 +293,11 @@ end
 
 -- Updates the data for a specific board (either MemoryStore (Shards), or OrderedDataStore)
 --[=[
+	@within Board
 	@param userId number
 	@param value number | (number) -> (number)
+	@return Promise.TypedPromise<boolean>
 	@yields
-	@return boolean
 
 	Updates the data for a specific board (either MemoryStore (Shards), or OrderedDataStore).
 ]=]
@@ -270,7 +307,7 @@ function Board:Update(userId, value)
 
 	-- If we are using a MemoryStore, we can just update the data
 	if (self._storeType == "MemoryStore") then
-		self._logger:Log(1, `Successfully updated data for ${userId} in "{self._boardKey}"`);
+		self._logger:Log(1, `Successfully updated data for {userId} in "{self._boardKey}"`);
 		return self._store:Set(userId, value);
 	end;
 
@@ -315,6 +352,7 @@ end
 
 -- Destroys the board
 --[=[
+	@within Board
 	Destroys the board.
 ]=]
 function Board:Destroy()
