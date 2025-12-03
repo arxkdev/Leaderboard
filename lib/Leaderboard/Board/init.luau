@@ -52,6 +52,8 @@ export type BoardArguments = {
 	_storeUsing: string,
 	_store: (MemoryStoreSortedMap | OrderedDataStore | MemoryShard)?,
 	_logger: Logger.Logger?,
+	_boardConfig: BoardConfig?,
+	_maxRecords: number?,
 }
 
 --[=[
@@ -135,9 +137,10 @@ end
 type BoardConfig = {
 	Name: string,
 	Automation: boolean?,
-	Interval: number?,
 	MaxRecords: number?,
 	DisplayCount: number?,
+	SaveInterval: number?,
+	RefreshInterval: number?,
 	Shards: number?,
 }
 
@@ -204,6 +207,8 @@ function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingEx
 	self._storeType, self._store = ConstructStore(boardKey, leaderboardType, rollingExpiry, boardConfig, debugMode);
 	self._logger = Logger.new(`Board-{boardKey}`, debugMode or false);
 	self._trove = Trove.new();
+	self._boardConfig = boardConfig;
+	self._maxRecords = boardConfig and boardConfig.MaxRecords or Manifest.DEFAULT_RECORD_COUNT;
 
 	-- New implementation: we just check if the current id is different from the previous one
 	if (leaderboardType == "Hourly" or leaderboardType == "Daily" or leaderboardType == "Weekly" or leaderboardType == "Monthly" or leaderboardType == "Yearly") then
@@ -218,6 +223,30 @@ function Board.new(boardKey: string, leaderboardType: LeaderboardType, rollingEx
 				task.wait(5);
 			end;
 		end);
+	end;
+
+	-- Start periodic cleanup for OrderedDataStore
+	if (not OFFLINE_ENVIRONMENT and self._storeType == "OrderedDataStore" and self._store) then
+		self._trove:Add(task.spawn(function()
+			-- Wait a bit before starting cleanup to let the board initialize
+			task.wait(60);
+			
+			while (true) do
+				-- Cleanup interval: every 10 minutes (similar to MemoryShard cleanup frequency)
+				task.wait(600);
+				
+				-- Use pcall to handle cleanup failures gracefully (rate limits, etc.)
+				-- Other servers will also help clean up over time
+				local success, err = pcall(function()
+					self:_cleanupOrderedDataStore():await();
+				end);
+				if (not success) then
+					self._logger:Log(3, `OrderedDataStore cleanup cycle pcall failed: {err}`);
+				end;
+			end;
+		end));
+		
+		self._logger:Log(1, `Started OrderedDataStore cleanup thread for {boardKey} with max {self._maxRecords} records`);
 	end;
 
 	return self;
@@ -240,42 +269,101 @@ function Board:Get(amount, sortDirection)
 	SmartAssert(type(sortDirection) == "nil" or typeof(sortDirection) == "string", "SortDirection must be a string");
 	sortDirection = sortDirection or "Descending";
 
-	local function RetrieveTopData()
-		if (OFFLINE_ENVIRONMENT) then
-			return {} :: { TopData }
-		end;
-
-		if (self._storeType == "MemoryStore") then
-			local Result = self._store:Get(amount, sortDirection):awaitValue();
-			local Promises = {};
-			for rank, data in pairs(Result) do
-				table.insert(Promises, Promise.new(function(resolve)
-					resolve(Transform(rank, data.key, data.value))
-				end));
-			end;
-			return Promise.all(Promises):awaitValue() :: { TopData };
-		else -- TODO: This will be where DataStoreShards are used. Make sure that's explicitly stated.
-			-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
-			-- if (RequestBudget < 1) then
-			-- 	warn(`Skipping getting top data for {self._boardKey} due to insufficient budget`);
-			-- 	return {};
-			-- end;
-			local Result = self._store:GetSortedAsync(sortDirection ~= "Descending", amount);
-			local Data = Result:GetCurrentPage() :: {any};
-			local Promises = {};
-			for rank, data in pairs(Data) do
-				table.insert(Promises, Promise.new(function(resolve)
-					resolve(Transform(rank, data.key, data.value))
-				end));
-			end;
-			return Promise.all(Promises):awaitValue() :: { TopData };
-		end;
-	end;
-
 	return Promise.new(function(resolve, reject)
 		local Success, Result = pcall(function()
-			return RetrieveTopData();
+			if (OFFLINE_ENVIRONMENT) then
+				return {} :: { TopData }
+			end;
+
+			if (self._storeType == "MemoryStore") then
+				-- Use Backoff to retry Get with exponential backoff
+				local backoffSuccess, backoffResult = Backoff.exponentialAsync(function()
+					local success, result = pcall(function()
+						return self._store:Get(amount, sortDirection):awaitValue();
+					end);
+					if (not success) then
+						return false, result; -- Return (false, error) on failure
+					end;
+					return true, result; -- Return (true, result) on success
+				end, {
+					maxRetries = 3,
+					minInterval = 2,
+					maxInterval = 10,
+					exponentBase = 2,
+					onSuccess = function(attempt, result)
+						if attempt > 1 then
+							self._logger:Log(1, `MemoryStore Get success on attempt {attempt} for "{self._boardKey}"`)
+						end
+					end,
+					onRetry = function(attempt, lastError, nextWaitSeconds)
+						self._logger:Log(2, `Retrying MemoryStore Get for "{self._boardKey}" (attempt {attempt}) after {nextWaitSeconds}s: {lastError}`);
+					end,
+					onGiveUp = function(attempt, lastError)
+						self._logger:Log(3, `Failed to get data from MemoryStore for "{self._boardKey}" after {attempt} attempts: {lastError}`);
+					end,
+				});
+				
+				if (not backoffSuccess) then
+					error(backoffResult); -- Throw error to be caught by outer pcall
+				end;
+				
+				local Result = backoffResult;
+				local Promises = {};
+				for rank, data in pairs(Result) do
+					table.insert(Promises, Promise.new(function(resolve)
+						resolve(Transform(rank, data.key, data.value))
+					end));
+				end;
+				return Promise.all(Promises):awaitValue() :: { TopData };
+			else -- TODO: This will be where DataStoreShards are used. Make sure that's explicitly stated.
+				-- local RequestBudget = GetRequestBudget(Enum.DataStoreRequestType.GetSortedAsync);
+				-- if (RequestBudget < 1) then
+				-- 	warn(`Skipping getting top data for {self._boardKey} due to insufficient budget`);
+				-- 	return {};
+				-- end;
+				-- Use Backoff to retry GetSortedAsync with exponential backoff
+				local backoffSuccess, backoffResult = Backoff.exponentialAsync(function()
+					local success, result = pcall(function()
+						return self._store:GetSortedAsync(sortDirection ~= "Descending", amount);
+					end);
+					if (not success) then
+						return false, result; -- Return (false, error) on failure
+					end;
+					return true, result; -- Return (true, result) on success
+				end, {
+					maxRetries = 3,
+					minInterval = 2,
+					maxInterval = 10,
+					exponentBase = 2,
+					onSuccess = function(attempt, result)
+						if attempt > 1 then
+							self._logger:Log(1, `GetSortedAsync success on attempt {attempt} for "{self._boardKey}"`)
+						end
+					end,
+					onRetry = function(attempt, lastError, nextWaitSeconds)
+						self._logger:Log(2, `Retrying GetSortedAsync for "{self._boardKey}" (attempt {attempt}) after {nextWaitSeconds}s: {lastError}`);
+					end,
+					onGiveUp = function(attempt, lastError)
+						self._logger:Log(3, `Failed to get sorted data for "{self._boardKey}" after {attempt} attempts: {lastError}`);
+					end,
+				});
+				
+				if (not backoffSuccess) then
+					error(backoffResult); -- Throw error to be caught by outer pcall
+				end;
+				
+				local Result = backoffResult;
+				local Data = Result:GetCurrentPage() :: {any};
+				local Promises = {};
+				for rank, data in pairs(Data) do
+					table.insert(Promises, Promise.new(function(resolve)
+						resolve(Transform(rank, data.key, data.value))
+					end));
+				end;
+				return Promise.all(Promises):awaitValue() :: { TopData };
+			end;
 		end);
+
 		if (not Success) then
 			warn(`Leaderboard had trouble getting top data with error: {Result}`);
 			return reject(Result);
@@ -341,6 +429,92 @@ function Board:Update(userId, value)
 		self._logger:Log(1, `Successfully updated data for "{userId}" in "{self._boardKey}"`);
 		return resolve(Result);
 	end) :: Promise.TypedPromise<boolean>;
+end
+
+--[=[
+	@private
+	@return Promise.TypedPromise<boolean>
+	@yields
+
+	Cleans up excess entries from OrderedDataStore using GetSortedAsync with pagination.
+	Removes entries beyond MaxRecords limit, using 1-second delay between deletes.
+]=]
+function Board:_cleanupOrderedDataStore()
+	return Promise.new(function(resolve, reject)
+		local success, err = pcall(function()
+			if (OFFLINE_ENVIRONMENT or not self._store or self._storeType ~= "OrderedDataStore") then
+				return resolve(false);
+			end;
+
+			local maxRecords = self._maxRecords or Manifest.DEFAULT_RECORD_COUNT;
+			
+			-- Get sorted data with pagination, using pagesize up to MaxRecords
+			-- This gives us the top MaxRecords entries (which we want to keep)
+			local success, pages = pcall(function()
+				return self._store:GetSortedAsync(false, maxRecords); -- false = Descending
+			end);
+			
+			if (not success) then
+				self._logger:Log(3, `Failed to get sorted data for cleanup: {pages}`);
+				return resolve(false);
+			end;
+			
+			-- If there are no more pages, we're done (all entries are within MaxRecords)
+			if (pages.IsFinished) then
+				return resolve(true);
+			end;
+			
+			-- Now start removing entries beyond MaxRecords
+			-- Advance to next page and remove all entries from subsequent pages
+			local removedCount = 0;
+			local currentPage = pages;
+			
+			-- Process remaining pages and remove entries
+			while (not currentPage.IsFinished) do
+				-- Advance to next page
+				local advanceSuccess, advanceErr = pcall(function()
+					currentPage:AdvanceToNextPageAsync();
+				end);
+				
+				if (not advanceSuccess) then
+					-- Rate limit or error, stop cleanup (other servers will help)
+					self._logger:Log(2, `Stopped cleanup due to advance error (rate limit?): {advanceErr}`);
+					break;
+				end;
+				
+				local pageData = currentPage:GetCurrentPage();
+				
+				-- Remove each entry on this page with 1-second delay between deletes
+				for _, entry in pageData do
+					-- Wait 1 second before each delete (similar to _valueQueue pattern)
+					task.wait(1);
+					
+					local deleteSuccess, deleteErr = pcall(function()
+						return self._store:RemoveAsync(entry.key);
+					end);
+					
+					if (deleteSuccess) then
+						removedCount += 1;
+					else
+						-- Rate limit or error, stop cleanup (other servers will help)
+						self._logger:Log(2, `Stopped cleanup due to delete error (rate limit?): {deleteErr}`);
+						return resolve(true);
+					end;
+				end;
+			end;
+			
+			if (removedCount > 0) then
+				self._logger:Log(1, `Cleaned up {removedCount} excess entries from OrderedDataStore "{self._boardKey}"`);
+			end;
+			
+			return resolve(true);
+		end);
+		
+		if (not success) then
+			self._logger:Log(3, `OrderedDataStore cleanup failed: {err}`);
+			return resolve(false); -- Don't reject, just log and continue
+		end;
+	end);
 end
 
 -- Destroys the board

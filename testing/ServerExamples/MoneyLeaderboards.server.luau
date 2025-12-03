@@ -15,24 +15,27 @@ local Leaderboards = {
 	["Weekly"] = {
 		Name = `Money-Weekly-{Key}`,
 		Automation = true,
-		Interval = 30,
 		MaxRecords = 1000,
 		DisplayCount = 50,
+		SaveInterval = 30,
+		RefreshInterval = 600,
 	},
 	--[[
 	["Monthly"] = {
 		Name = `Money-Monthly-{Key}`,
 		Automation = true,
-		Interval = 30,
 		MaxRecords = 500,
 		DisplayCount = 50,
+		SaveInterval = 30,
+		RefreshInterval = 600,
 	},]]
 	["AllTime"] = {
 		Name = `Money-AllTime-{Key}`,
 		Automation = true,
-		Interval = 30,
 		MaxRecords = 500,
 		DisplayCount = 50,
+		SaveInterval = 30,
+		RefreshInterval = 600,
 	},
 };
 local MoneyLeaderboard = Leaderboard.new(Leaderboards, true);
@@ -91,6 +94,19 @@ task.delay(3, function()
 	MoneyLeaderboard:SetValues("All", 6271821, 1000);
 	task.wait(1);
 	print(MoneyLeaderboard:GetRecords("All", 100):expect());
+
+	print("Looping")
+	local flag = true
+	task.delay(5, function()
+		flag = false
+		print("Flag set to false")
+	end)
+	while flag do
+		task.wait(0.01)
+		MoneyLeaderboard:IncrementValues({["Weekly"] = true}, 6271821, 1);
+		print("Queue")
+		--print(MoneyLeaderboard:GetRecords("All", 100):expect());
+	end
 end)
 
 
