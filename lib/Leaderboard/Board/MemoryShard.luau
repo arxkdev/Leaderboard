@@ -477,8 +477,8 @@ function MemoryShard:Get(topAmount, sortDirection)
 				return true, result; -- Return (true, result) on success
 			end, {
 				maxRetries = 3,
-				minInterval = 0.5,
-				maxInterval = 5,
+				minInterval = 2,
+				maxInterval = 10,
 				exponentBase = 2,
 				onSuccess = function(attempt, result)
 					if attempt > 1 then
