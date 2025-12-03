@@ -83,11 +83,10 @@ export type LeaderboardTypeArgument = {
 	@field _types LeaderboardTypeArgument
 	@field _boards {[LeaderboardType]: Board}
 	@field _valueQueue ValueQueueType
-	@field _isSaving boolean
+	@field _isSaving {[LeaderboardType]: boolean}
 	@field _lastSaved number
 	@field _isFetching boolean
 	@field _lastFetch number
-	@field _saveThread thread?
 	@field _logger Logger.Logger?
 ]=]
 export type LeaderboardArguments = {
@@ -97,11 +96,10 @@ export type LeaderboardArguments = {
 	_types: LeaderboardTypeArgument,
 	_boards: {[LeaderboardType]: Board},
 	_valueQueue: ValueQueueType,
-	_isSaving: boolean,
+	_isSaving: {[LeaderboardType]: boolean},
 	_lastSaved: number,
 	_isFetching: boolean,
 	_lastFetch: number,
-	_saveThread: thread?,
 	_trove: typeof(Trove.new),
 	_logger: Logger.Logger?,
 }
@@ -140,7 +138,7 @@ type ValueQueueType = {
 	@field SetValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
 	@field UpdateStoreValues (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> ()
 	@field GetRecords (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>
-	@field SaveValues (self: Leaderboard) -> Promise.TypedPromise<boolean>
+	@field SaveValues (self: Leaderboard, boardType: LeaderboardType?) -> Promise.TypedPromise<number>
 	@field Destroy (self: Leaderboard) -> ()
 	@field new (leaderboardTypes: LeaderboardTypeArgument, debugMode: boolean?) -> Leaderboard
 ]=]
@@ -150,7 +148,7 @@ type Object = {
 	SetValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	UpdateStoreValues: (self: Leaderboard, boardTypes: {LeaderboardType} | string, userId: number, value: number | (number) -> (number)) -> (),
 	GetRecords: (self: Leaderboard, boardTypes: {LeaderboardType} | string, optionalRange: {[LeaderboardType | string]: number} | number, sortDirection: string) -> Promise.TypedPromise<{AllTopData}>,
-	SaveValues: (self: Leaderboard) -> Promise.TypedPromise<boolean>,
+	SaveValues: (self: Leaderboard, boardType: LeaderboardType?) -> Promise.TypedPromise<number>,
 	Destroy: (self: Leaderboard) -> (),
 	new: (leaderboardTypes: LeaderboardTypeArgument, debugMode: boolean?) -> Leaderboard,
 }
@@ -309,10 +307,9 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 	self._boards = {};
 	self._valueQueue = {};
 	self._lastSaved = 0;
-	self._isSaving = false;
+	self._isSaving = {};
 	self._lastFetch = 0;
 	self._isFetching = false;
-	self._saveThread = nil;
 	self._trove = Trove.new();
 	self._logger = Logger.new("Leaderboard", debugMode or false);
 
@@ -393,24 +390,27 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 		end;
 	end;
 	
-	-- Start a single save loop that throttles to 1 per second
-	-- This loop processes the value queue continuously, one item at a time
-	self._saveThread = Spawn(function()
-		while (true) do
-			-- Process one item from the queue (SaveValues handles finding the next item)
-			local processed = self:SaveValues():awaitValue();
-			
-			if (processed) then
-				-- Item was processed, wait 1 second before processing next item
-				task.wait(1);
-			else
-				-- No items in queue, check again in 0.1 seconds
-				task.wait(0.1);
+	-- Start save loops for each board type based on their SaveInterval
+	-- Each board processes all its queued items when its SaveInterval elapses
+	for boardType, normalizedConfig in normalizedConfigs do
+		local boardConfig = normalizedConfig.Config;
+		local saveInterval = boardConfig and boardConfig.SaveInterval or 60; -- Default to 60 seconds if not specified
+		
+		-- Start save loop for this board type
+		local capturedBoardType = boardType;
+		local saveThread = Spawn(function()
+			while (true) do
+				-- Wait for the SaveInterval
+				task.wait(saveInterval);
+				
+				-- Process all queued items for this board type
+				-- Await the promise to ensure processing completes before the next interval
+				self:SaveValues(capturedBoardType):awaitValue();
 			end;
-		end;
-	end);
-	-- Add thread to Trove for cleanup
-	self._trove:Add(self._saveThread);
+		end);
+		-- Add thread to Trove for cleanup (Trove will cancel it when destroyed)
+		self._trove:Add(saveThread);
+	end;
 
 	-- Player removing
 	local playerRemovingConnection = Players.PlayerRemoving:Connect(function(player)
@@ -425,108 +425,148 @@ function Leaderboard.new(leaderboardTypes: LeaderboardTypeArgument, debugMode: b
 	return self;
 end
 
--- Processes a single item from the queue (throttled to 1 per second)
+-- Processes all items in the queue for a specific board type (or all boards if boardType is nil)
 --[=[
 	@within Leaderboard
-	@return Promise.TypedPromise<boolean> -- Returns true if an item was processed, false if queue is empty
+	@param boardType LeaderboardType? -- Optional board type to filter by. If nil, processes all boards.
+	@return Promise.TypedPromise<number> -- Returns the number of items processed
 	@yields
-	Processes a single item from the value queue. Designed to be called repeatedly at 1 per second.
+	Processes all items in the value queue for the specified board type (or all boards if nil).
+	Continues processing until the queue is empty for that board type.
 ]=]
-function Leaderboard:SaveValues()
-	-- Set saving flag FIRST to prevent concurrent execution
-	-- This must be done atomically before any queue access
-	if (self._isSaving) then
-		return Promise.resolve(false);
-	end;
-	self._isSaving = true;
-	
-	-- Find the first item in the queue to process
-	local userIdToProcess: number? = nil;
-	local boardTypeToProcess: LeaderboardType? = nil;
-	local dataToProcess: {Amount: number | ((number) -> number), Board: Board, OperationType: OperationType}? = nil;
-	
-	-- Iterate through queue to find first item (maintains chronological order)
-	for userId, boardTypes in self._valueQueue do
-		for boardType, data in boardTypes do
-			userIdToProcess = userId;
-			boardTypeToProcess = boardType;
-			dataToProcess = data;
-			break;
+function Leaderboard:SaveValues(boardType: LeaderboardType?)
+	-- Determine which board types to lock
+	-- If boardType is specified, only lock that specific board type
+	-- If boardType is nil, lock all board types (since we'll process items from all boards)
+	local boardTypesToLock: {LeaderboardType} = {};
+	if (boardType) then
+		-- Single board type: only check and lock that one
+		if (self._isSaving[boardType]) then
+			return Promise.resolve(0);
 		end;
-		if (userIdToProcess) then
-			break;
-		end;
-	end;
-	
-	-- If no items in queue, reset flag and return
-	if (not userIdToProcess or not boardTypeToProcess or not dataToProcess) then
-		self._isSaving = false;
-		return Promise.resolve(false);
-	end;
-	
-	-- CRITICAL: Remove item from queue IMMEDIATELY after finding it, before processing
-	-- This prevents race conditions where multiple threads process the same item
-	-- Store references before removal
-	local boardRef = dataToProcess.Board;
-	local operationType = dataToProcess.OperationType;
-	local amount = dataToProcess.Amount;
-	
-	-- Remove from queue immediately
-	if (self._valueQueue[userIdToProcess]) then
-		self._valueQueue[userIdToProcess][boardTypeToProcess] = nil;
-		-- If no more boardTypes for this userId, remove the userId entry entirely
-		local hasRemainingBoards = false;
-		for _ in self._valueQueue[userIdToProcess] do
-			hasRemainingBoards = true;
-			break;
-		end;
-		if (not hasRemainingBoards) then
-			self._valueQueue[userIdToProcess] = nil;
-		end;
-	end;
-	
-	-- Process the single item using stored references (item already removed from queue)
-	return boardRef:Update(userIdToProcess, function(oldValue)
-		if (operationType == "Set") then
-			-- Set operation: use the value/function directly
-			if (type(amount) == "function") then
-				return amount(oldValue);
-			else
-				return amount;
+		table.insert(boardTypesToLock, boardType);
+	else
+		-- All boards: check if ANY board type is saving, and lock ALL board types
+		for bt in self._types do
+			if (self._isSaving[bt]) then
+				return Promise.resolve(0);
 			end;
-		elseif (operationType == "Increment") then
-			-- Increment operation: add the amount
-			if (type(amount) == "function") then
-				return oldValue + amount(oldValue);
-			else
-				return oldValue + amount;
+			table.insert(boardTypesToLock, bt);
+		end;
+	end;
+	
+	-- Set saving flags for all relevant board types
+	-- This prevents concurrent processing of the same board type(s)
+	for _, bt in boardTypesToLock do
+		self._isSaving[bt] = true;
+	end;
+	
+	return Promise.new(function(resolve)
+		local processedCount = 0;
+		
+		-- Process items one by one until queue is empty for the specified board type
+		-- Continue processing until no more items are found
+		while (true) do
+			-- Find the next item in the queue matching the board type filter
+			local userIdToProcess: number? = nil;
+			local boardTypeToProcess: LeaderboardType? = nil;
+			local dataToProcess: {Amount: number | ((number) -> number), Board: Board, OperationType: OperationType}? = nil;
+			
+			-- Iterate through queue to find first item matching the filter
+			for userId, boardTypes in self._valueQueue do
+				for boardTypeKey, data in boardTypes do
+					-- If boardType is specified, only process items for that board type
+					-- If boardType is nil, process all items
+					if (not boardType or boardTypeKey == boardType) then
+						userIdToProcess = userId;
+						boardTypeToProcess = boardTypeKey;
+						dataToProcess = data;
+						break;
+					end;
+				end;
+				if (userIdToProcess) then
+					break;
+				end;
 			end;
-		else
-			self._logger:Log(3, `Invalid operation type: {operationType} for user {userIdToProcess}`);
-			return oldValue;
+			
+			-- If no items found, we're done
+			if (not userIdToProcess or not boardTypeToProcess or not dataToProcess) then
+				break;
+			end;
+			
+			-- CRITICAL: Remove item from queue IMMEDIATELY before processing
+			-- This prevents race conditions where multiple threads process the same item
+			local boardRef = dataToProcess.Board;
+			local operationType = dataToProcess.OperationType;
+			local amount = dataToProcess.Amount;
+			
+			-- Remove from queue immediately
+			if (self._valueQueue[userIdToProcess]) then
+				self._valueQueue[userIdToProcess][boardTypeToProcess] = nil;
+				-- If no more boardTypes for this userId, remove the userId entry entirely
+				local hasRemainingBoards = false;
+				for _ in self._valueQueue[userIdToProcess] do
+					hasRemainingBoards = true;
+					break;
+				end;
+				if (not hasRemainingBoards) then
+					self._valueQueue[userIdToProcess] = nil;
+				end;
+			end;
+			
+			-- Process the item using stored references (item already removed from queue)
+			local updatePromise = boardRef:Update(userIdToProcess, function(oldValue)
+				if (operationType == "Set") then
+					-- Set operation: use the value/function directly
+					if (type(amount) == "function") then
+						return amount(oldValue);
+					else
+						return amount;
+					end;
+				elseif (operationType == "Increment") then
+					-- Increment operation: add the amount
+					if (type(amount) == "function") then
+						return oldValue + amount(oldValue);
+					else
+						return oldValue + amount;
+					end;
+				else
+					self._logger:Log(3, `Invalid operation type: {operationType} for user {userIdToProcess}`);
+					return oldValue;
+				end;
+			end);
+			
+			-- Await the update promise
+			local success, result = pcall(function()
+				return updatePromise:awaitValue();
+			end);
+			
+			if (success) then
+				processedCount += 1;
+			else
+				self._logger:Log(3, `Error updating value for user {userIdToProcess} in board {boardTypeToProcess}: {result}`);
+				-- On error, re-add the item to the queue for retry
+				-- This ensures failed items can be retried
+				if (not self._valueQueue[userIdToProcess]) then
+					self._valueQueue[userIdToProcess] = {};
+				end;
+				self._valueQueue[userIdToProcess][boardTypeToProcess] = {
+					Amount = amount,
+					Board = boardRef,
+					OperationType = operationType,
+				};
+			end;
+			
+			-- Wait 1 second between each save operation to respect rate limits
+			task.wait(1);
 		end;
-	end):andThen(function()
-		-- Item was already removed from queue, just reset flag
-		self._isSaving = false;
-		self._lastSaved = tick();
-		return true;
-	end):catch(function(err)
-		self._logger:Log(3, `Error updating value for user {userIdToProcess} in board {boardTypeToProcess}: {err}`);
-		-- On error, re-add the item to the queue for retry
-		-- This ensures failed items can be retried
-		if (not self._valueQueue[userIdToProcess]) then
-			self._valueQueue[userIdToProcess] = {};
+		
+		-- Reset flags for all relevant board types and return count
+		for _, bt in boardTypesToLock do
+			self._isSaving[bt] = false;
 		end;
-		self._valueQueue[userIdToProcess][boardTypeToProcess] = {
-			Amount = amount,
-			Board = boardRef,
-			OperationType = operationType,
-		};
-		self._isSaving = false;
 		self._lastSaved = tick();
-		-- Return false so the save thread doesn't wait 1 second
-		-- This allows other items to be processed while the failed item remains in queue for retry
-		return false;
+		resolve(processedCount);
 	end);
 end
 
@@ -707,22 +747,54 @@ end
 	Destroys the leaderboard
 ]=]
 function Leaderboard:Destroy()
-	-- Stop the save thread first to prevent race conditions with concurrent SaveValues() calls
-	if (self._saveThread) then
-		task.cancel(self._saveThread);
-		self._saveThread = nil;
-		-- Wait for any in-flight SaveValues() to complete
-		-- Poll until _isSaving is false or timeout after 2 seconds
-		local waitStart = tick();
-		while (self._isSaving and (tick() - waitStart) < 2) do
+	-- Cancel all save threads first by cleaning Trove (which cancels threads/connections but doesn't destroy resources)
+	-- This ensures threads sleeping on task.wait() are woken up immediately
+	-- Using Clean() instead of Destroy() so resources aren't destroyed yet
+	self._trove:Clean();
+	
+	-- Wait for any in-flight SaveValues() to complete for all board types
+	-- Poll until all board types are done saving or timeout after 2 seconds
+	local waitStart = tick();
+	local anySaving = true;
+	while (anySaving and (tick() - waitStart) < 2) do
+		anySaving = false;
+		-- Check if any board type is still saving
+		for boardType in self._types do
+			if (self._isSaving[boardType]) then
+				anySaving = true;
+				break;
+			end;
+		end;
+		if (anySaving) then
 			task.wait(0.05);
 		end;
-		if (self._isSaving) then
+	end;
+	
+	-- CRITICAL: Reset any stuck flags from cancelled SaveValues() operations
+	-- If threads were cancelled mid-operation, flags may still be set to true
+	-- This prevents Bug 1 where final SaveValues() call is skipped
+	for boardType in self._types do
+		if (self._isSaving[boardType]) then
+			self._isSaving[boardType] = false;
+		end;
+	end;
+	
+	if (anySaving) then
+		if (self._logger) then
 			self._logger:Log(2, "Leaderboard:Destroy() Save operation still in progress after cancellation wait");
 		end;
 	end;
 	
-	if (not self._isSaving and not self._isFetching) then
+	-- Check if any board type is still saving (should be false now after reset)
+	local anySavingFinal = false;
+	for boardType in self._types do
+		if (self._isSaving[boardType]) then
+			anySavingFinal = true;
+			break;
+		end;
+	end;
+	
+	if (not anySavingFinal and not self._isFetching) then
 		local TimeSinceLastSaved = tick() - self._lastSaved;
 		local TimeSinceLastFetch = tick() - self._lastFetch;
 
@@ -732,26 +804,20 @@ function Leaderboard:Destroy()
 			Unfortunately this is all we can do, and yes there could potentially be some people who don't get saved in the very last cycle
 		--]]
 		if ((TimeSinceLastSaved >= 60 * 2 and TimeSinceLastFetch >= 60 * 2) or (self._lastFetch == 0 and self._lastSaved == 0)) then
-			self._logger:Log(1, "Leaderboard:Destroy() Saving values");
-			-- Await the save operation to ensure it completes before destroying
-			-- Process remaining items with a timeout to avoid hanging BindToClose
-			local maxSaveAttempts = 100; -- Limit to prevent infinite loops
-			local saveAttempts = 0;
-			while (saveAttempts < maxSaveAttempts) do
-				local processed = self:SaveValues():awaitValue();
-				if (not processed) then
-					-- No more items to process
-					break;
-				end;
-				saveAttempts += 1;
+			if (self._logger) then
+				self._logger:Log(1, "Leaderboard:Destroy() Saving values");
 			end;
-			if (saveAttempts >= maxSaveAttempts) then
-				self._logger:Log(2, `Leaderboard:Destroy() Reached max save attempts ({maxSaveAttempts}), some items may remain unsaved`);
+			-- Process all remaining items in the queue (no board type filter = all boards)
+			-- Flags have been reset, so this will proceed normally
+			local processedCount = self:SaveValues():awaitValue();
+			if (processedCount > 0 and self._logger) then
+				self._logger:Log(1, `Leaderboard:Destroy() Processed {processedCount} items`);
 			end;
 		end;
 	end;
 
-	-- Destroy Trove (this will cleanup boards, threads, connections, signals, and logger)
+	-- Now destroy Trove (which will destroy all managed resources: signals, logger, boards)
+	-- This is safe because we haven't manually destroyed anything yet
 	self._trove:Destroy();
 
 	-- Remove from leaderboards
