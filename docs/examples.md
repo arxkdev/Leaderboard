@@ -10,20 +10,48 @@ local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard);
 
 local Key = 1; -- The key for the leaderboard (change to reset)
 local LeaderboardTypes = { -- You must provide keys for the individual boards
-	["Hourly"] = `Hourly-{Key}`,
-	["Daily"] = `Daily-{Key}`,
-	["Weekly"] = `Weekly-{Key}`,
-	["Monthly"] = `Monthly-{Key}`,
-	["AllTime"] = `AllTime-{Key}`,
+	["Hourly"] = {
+		Name = `Hourly-{Key}`,
+		Automation = true,
+		MaxRecords = 100, -- Maximum number of records to store
+		DisplayCount = 50, -- Number of records to display (defaults to 50)
+		SaveInterval = 30, -- How often to save values (defaults to 30 seconds)
+		RefreshInterval = 600, -- How often to refresh records (defaults to 600 seconds / 10 minutes). Increase if you are reaching rate limits frequently.
+	},
+	["Daily"] = {
+		Name = `Daily-{Key}`,
+		Automation = true,
+		MaxRecords = 100,
+		DisplayCount = 50,
+		SaveInterval = 30,
+		RefreshInterval = 600,
+	},
+	["Weekly"] = {
+		Name = `Weekly-{Key}`,
+		Automation = true,
+		MaxRecords = 100,
+		DisplayCount = 50,
+		SaveInterval = 30,
+		RefreshInterval = 600,
+	},
+	["Monthly"] = {
+		Name = `Monthly-{Key}`,
+		Automation = true,
+		MaxRecords = 100,
+		DisplayCount = 50,
+		SaveInterval = 300,
+		RefreshInterval = 1800,
+	},
+	["AllTime"] = {
+		Name = `AllTime-{Key}`,
+		Automation = true,
+		MaxRecords = 100,
+		DisplayCount = 50,
+		SaveInterval = 950,
+		RefreshInterval = 1800,
+	},
 };
-local MoneyLeaderboard = Leaderboard.new(LeaderboardTypes, {
-    -- Settings
-    Automation = true,
-    MaxRecords = 100, -- Maximum number of records to store
-    DisplayCount = 50, -- Number of records to display (defaults to 50)
-    SaveInterval = 30, -- How often to save values (defaults to 30 seconds)
-    RefreshInterval = 600, -- How often to refresh records (defaults to 600 seconds / 10 minutes)
-})
+local MoneyLeaderboard = Leaderboard.new(LeaderboardTypes, true);
 
 local function FunctionToIncrementMoney(userId: number, amount: number)
     -- This is where you would give the user money, just add this line to increment the leaderboard aswell
@@ -48,11 +76,21 @@ local RECORD_COUNT = 100; -- Amount of records to get per board
 
 local Key = 1; -- The key for the leaderboard (change to reset)
 local LeaderboardTypes = { -- You must provide keys for the individual boards
-    ["Hourly"] = `Hourly-{Key}`,
-    ["Daily"] = `Daily-{Key}`,
-    ["Weekly"] = `Weekly-{Key}`,
-    ["Monthly"] = `Monthly-{Key}`,
-    ["AllTime"] = `AllTime-{Key}`,
+    ["Hourly"] = {
+		Name = `Hourly-{Key}`,
+	},
+    ["Daily"] = {
+		Name = `Daily-{Key}`,
+	},
+    ["Weekly"] = {
+		Name = `Weekly-{Key}`,
+	},
+    ["Monthly"] = {
+		Name = `Monthly-{Key}`,
+	},
+    ["AllTime"] = {
+		Name = `AllTime-{Key}`,
+	},
 };
 local MoneyLeaderboard = Leaderboard.new(LeaderboardTypes);
 
@@ -91,18 +129,19 @@ local Leaderboard = require(game:GetService("ReplicatedStorage").Leaderboard);
 
 local Key = 1; -- The key for the leaderboard (change to reset)
 local Leaderboards = {
-	["AllTime"] = `AllTime-{Key}`,
+	["AllTime"] = {
+		Name = `AllTime-{Key}`,
+		Automation = true,
+		MaxRecords = 100, -- Maximum number of records to store
+		DisplayCount = 50, -- Number of records to display (defaults to 50)
+		SaveInterval = 30, -- How often to save values (defaults to 30 seconds)
+		RefreshInterval = 600, -- How often to refresh records (defaults to 600 seconds / 10 minutes)
+	},
     ["10MinutesRolling"] = {60 * 10, `10MinutesRolling-{Key}`}, -- 10 minutes rolling leaderboard
 	["15MinutesRolling"] = {60 * 15, `15MinutesRolling-{Key}`}, -- 15 minutes rolling leaderboard
     ["1MinuteRolling"] = {60, `1MinuteRolling-{Key}`}, -- 1 minute rolling leaderboard
 };
-local MoneyLeaderboard = Leaderboard.new(Leaderboards, {
-	Automation = true,
-	MaxRecords = 100, -- Maximum number of records to store
-	DisplayCount = 50, -- Number of records to display (defaults to 50)
-	SaveInterval = 30, -- How often to save values (defaults to 30 seconds)
-	RefreshInterval = 600, -- How often to refresh records (defaults to 600 seconds / 10 minutes)
-});
+local MoneyLeaderboard = Leaderboard.new(Leaderboards, true);
 
 local function IncrementMoneyTest()
 	-- Test userIds
