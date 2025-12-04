@@ -233,6 +233,7 @@ function MemoryShard.new(leaderboardType: LeaderboardType, boardKey: string, sha
 	-- Start periodic cleanup thread
 	if (not OFFLINE_ENVIRONMENT) then
 		self._trove:Add(task.spawn(function()
+			task.wait(60) -- Wait 60 seconds before starting cleanup to let boards initialize
 			while (true) do
 				task.wait(SHARD_CLEANUP_SETTINGS.CLEANUP_INTERVAL);
 
@@ -624,14 +625,30 @@ end
 ]=]
 function MemoryShard:_removeKeyFromShard(shardIndex: number, key: string)
 	return Promise.new(function(resolve, reject)
-		local Success, Result = pcall(function()
+		local Success, Result = Backoff.exponentialAsync(pcall(function()
 			local Shard = self._shards[shardIndex];
 			if (not Shard) then
 				return reject("Shard not found");
 			end;
 
 			return Shard:RemoveAsync(key);
-		end);
+		end), {
+			maxRetries = 3,
+			minInterval = 2,
+			maxInterval = 10,
+			exponentBase = 2,
+			onSuccess = function(attempt, result)
+				if attempt > 1 then
+					self._logger:Log(1, `RemoveKeyFromShard: GetRangeAsync success on attempt {attempt} for shard {shardIndex}`)
+				end
+			end,
+			onRetry = function(attempt, lastError, nextWaitSeconds)
+				self._logger:Log(2, `RemoveKeyFromShard: Retrying GetRangeAsync for shard {shardIndex} (attempt {attempt}) after {nextWaitSeconds}s: {lastError}`);
+			end,
+			onGiveUp = function(attempt, lastError)
+				self._logger:Log(3, `RemoveKeyFromShard: Failed to get data from shard {shardIndex} after {attempt} attempts: {lastError}`);
+			end,
+		});
 
 		if (not Success) then
 			return reject(Result);
@@ -675,9 +692,27 @@ function MemoryShard:_cleanupShards(maxEntriesPerShard: number?)
 						local CurrentBatchSize = math.min(BatchSize, ExcessCount - RemovedCount);
 
 						-- Get the lowest-scoring entries (ascending order)
-						local Success, LowEntries = pcall(function()
+						local Success, LowEntries = Backoff.exponentialAsync(pcall(function()-- Backoff yields and will offset the while loop to find rhythm with rate limits
 							return shard:GetRangeAsync(Enum.SortDirection.Ascending, CurrentBatchSize);
-						end);
+						end), {
+							maxRetries = 3,
+							minInterval = 2,
+							maxInterval = 10,
+							exponentBase = 2,
+							onSuccess = function(attempt, result)
+								if attempt > 1 then
+									self._logger:Log(1, `Cleanup: GetRangeAsync success on attempt {attempt} for shard {shardIndex}`)
+								end
+							end,
+							onRetry = function(attempt, lastError, nextWaitSeconds)
+								self._logger:Log(2, `Cleanup: Retrying GetRangeAsync for shard {shardIndex} (attempt {attempt}) after {nextWaitSeconds}s: {lastError}`);
+							end,
+							onGiveUp = function(attempt, lastError)
+								reject(lastError)
+								self._logger:Log(3, `Cleanup: Failed to get data from shard {shardIndex} after {attempt} attempts: {lastError}`);
+							end,
+						});
+
 						if (not Success) then
 							return reject(LowEntries);
 						end;
@@ -689,11 +724,14 @@ function MemoryShard:_cleanupShards(maxEntriesPerShard: number?)
 								self:_removeKeyFromShard(shardIndex, entry.key):await();
 							end);
 							RemovedCount += 1;
+							task.wait(0.5) -- Wait 0.5 seconds between removals to avoid rate limiting / backoff being too aggressive
 						end;
 
 						if (#LowEntries == 0) then
 							break;
 						end;
+
+						task.wait(1) -- Wait 1 second between batches to avoid rate limiting / backoff being too aggressive
 					end;
 
 					self._logger:Log(1, `[{self._boardKey}]: Cleaned up shard {shardIndex}, removed {RemovedCount} entries`);
