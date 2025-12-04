@@ -1,7 +1,7 @@
 [package]
 name = "arxkdev/leaderboard"
 description = "Leaderboard is an intuitive, open-source module designed to effortlessly establish and manage robust non-persistent & persistent leaderboards for your Roblox experiences."
-version = "0.0.5"
+version = "0.1.2"
 license = "MIT"
 authors = ["Arxk (https://github.com/arxkdev)"]
 registry = "https://github.com/UpliftGames/wally-index"
@@ -10,3 +10,5 @@ realm = "shared"
 [dependencies]
 Promise = "arxkdev/typed-promise@4.0.2"
 Signal = "sleitnick/signal@1.3.0"
+Backoff = "sigmathetatech/backoff@0.1.2"
+Trove = "sleitnick/trove@1.8.0"

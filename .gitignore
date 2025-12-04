@@ -1,3 +1,4 @@
 build/
 lib/Leaderboard/Packages
 lib/Leaderboard/wally.lock
+*.lock
